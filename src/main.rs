@@ -1,18 +1,22 @@
 use anyhow::{Context, Result};
+use rand::Rng;
 use std::io::{self, Write};
 
+mod hitting;
 mod math;
 mod progress;
 
+use hitting::{Hittable, Sphere};
 use math::{Point3, Ray, Vec3};
-type Colour = Vec3;
-
 use progress::Progress;
+
+type Colour = Vec3;
 
 fn main() -> Result<()> {
     // Output
     let mut output = io::stdout();
     let mut info = io::stderr();
+    let mut rng = rand::thread_rng();
 
     // Image
     let aspect_ratio = 16.0 / 9.0;
@@ -30,6 +34,24 @@ fn main() -> Result<()> {
     let lower_left_corner =
         origin - horizontal / 2.0 - vertical / 2.0 - Vec3::new(0.0, 0.0, focal_length);
 
+    let world: Vec<Box<dyn Hittable>> = vec![
+        Sphere {
+            centre: Point3::new(0, 0, -1),
+            radius: 0.5,
+        },
+        Sphere {
+            centre: Point3::new(1, 1, -2),
+            radius: 0.5,
+        },
+        Sphere {
+            centre: Point3::new(0.0, -100.5, -1.0),
+            radius: 100.0,
+        },
+    ]
+    .into_iter()
+    .map(|s: Sphere| -> Box<dyn Hittable> { Box::new(s) })
+    .collect();
+
     // Render
     let mut progress = Progress::new(&mut info, 50);
     progress.set_label("Rendering");
@@ -44,38 +66,19 @@ fn main() -> Result<()> {
                 origin,
                 direction: lower_left_corner + u * horizontal + v * vertical - origin,
             };
-            let colour = ray_colour(&r);
+            let colour = ray_colour(&r, &world);
             write_pixel(&mut output, colour)?;
         }
     }
+
     progress.clear()?;
     eprintln!("Done");
-
     Ok(())
 }
 
-// returns distance to intersection if hit
-fn hit_sphere(centre: &Point3, radius: f64, ray: &Ray) -> Option<f64> {
-    let oc = ray.origin - *centre;
-    let a = ray.direction * ray.direction;
-    let b = 2.0 * (oc * ray.direction);
-    let c = oc * oc - radius * radius;
-    let discriminant = b * b - 4.0 * a * c;
-    if discriminant > 0.0 {
-        let distance = (-b - discriminant.sqrt()) / (2.0 * a);
-        Some(distance)
-    } else {
-        None
-    }
-}
-
-fn ray_colour(ray: &Ray) -> Colour {
-    let spheres = vec![(0.5, Point3::new(0, 0, -1)), (0.5, Point3::new(1, 1, -2))];
-    for (radius, centre) in spheres {
-        if let Some(distance) = hit_sphere(&centre, radius, ray) {
-            let normal = (ray.at(distance) - centre).unit_vector();
-            return 0.5 * Colour::new(normal.x + 1.0, normal.y + 1.0, normal.z + 1.0);
-        }
+fn ray_colour<T: Hittable>(ray: &Ray, world: &T) -> Colour {
+    if let Some(hit) = world.hit(ray, 0.0, 10.0) {
+        return 0.5 * Colour::new(hit.normal.x + 1.0, hit.normal.y + 1.0, hit.normal.z + 1.0);
     }
     let unit_direction = ray.direction.unit_vector();
     let t = 0.5 * (unit_direction.y + 1.0);

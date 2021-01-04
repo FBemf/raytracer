@@ -9,7 +9,7 @@ pub struct Vec3 {
     pub z: f64,
 }
 
-pub fn cross_product(lhs: Vec3, rhs: Vec3) -> Vec3 {
+pub fn _cross_product(lhs: Vec3, rhs: Vec3) -> Vec3 {
     Vec3 {
         x: lhs.y * rhs.z - lhs.z * rhs.y,
         y: lhs.z * rhs.x - lhs.x * rhs.z,
@@ -73,6 +73,17 @@ impl std::ops::SubAssign for Vec3 {
     fn sub_assign(&mut self, other: Self) {
         let new = *self - other;
         *self = new;
+    }
+}
+
+impl std::ops::Neg for Vec3 {
+    type Output = Self;
+    fn neg(self) -> Self {
+        Self {
+            x: -self.x,
+            y: -self.y,
+            z: -self.z,
+        }
     }
 }
 
