@@ -24,7 +24,10 @@ impl HitRecord {
     }
 }
 
-pub trait Hittable {
+pub trait Hittable
+where
+    Self: Send + Sync,
+{
     fn hit(&self, ray: &Ray, min_dist: f64, max_dist: f64) -> Option<HitRecord>;
 }
 
