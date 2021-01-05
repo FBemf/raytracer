@@ -21,14 +21,15 @@ impl<'a> Progress<'a> {
     }
 
     pub fn update(&mut self, numerator: usize, denominator: usize) -> Result<()> {
-        let progress = numerator * self.length / denominator;
+        let progress = 2 * numerator * self.length / denominator;
         let remainder = self.length - progress;
         self.stream
             .write(
                 format!(
-                    "\r{}: [{}{}] ",
+                    "\r{}: [{}{}{}] ",
                     self.label,
-                    "#".repeat(progress),
+                    ":".repeat(progress / 2),
+                    if progress % 2 == 1 { "." } else { "" },
                     " ".repeat(remainder)
                 )
                 .as_bytes(),

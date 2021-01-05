@@ -15,7 +15,7 @@ mod objects;
 mod progress;
 
 use camera::Camera;
-use hitting::{Colour, Hittable, Material};
+use hitting::{random_colour, Colour, Hittable, Material};
 use materials::{Dielectric, Lambertian, Metal};
 use math::{clamp, coefficients, Point3, Ray, Vec3};
 use objects::Sphere;
@@ -27,20 +27,21 @@ fn main() -> Result<()> {
     let mut info = io::stderr();
 
     // Image
-    let aspect_ratio = 16.0 / 9.0;
-    let image_width = 400;
+    let aspect_ratio = 3.0 / 2.0;
+    let image_width = 120;
     let image_height = (image_width as f64 / aspect_ratio).round() as u32;
 
     // UI
-    let progress_bar_len = 80;
+    let progress_bar_len = 60;
     let start_time = Instant::now();
 
     // Camera
-    let look_from = Point3::new(3, 3, 2);
-    let look_at = Point3::new(0, 0, -1);
+    let look_from = Point3::new(13, 2, 3);
+    let look_at = Point3::new(0, 0, 0);
     let direction_up = Vec3::new(0, 1, 0);
     let field_of_view = 20;
-    let aperture = 2.0;
+    let aperture = 0.1;
+    let distance_to_focus = 10.0;
     let camera = Camera::new(
         look_from,
         look_at,
@@ -48,54 +49,10 @@ fn main() -> Result<()> {
         field_of_view,
         aspect_ratio,
         aperture,
-        (look_from - look_at).length(),
+        distance_to_focus,
     );
 
-    // Materials
-    let material_ground: Arc<dyn Material> = Arc::new(Lambertian {
-        albedo: Colour::new(0.8, 0.8, 0.0),
-    });
-    let material_centre: Arc<dyn Material> = Arc::new(Lambertian {
-        albedo: Colour::new(0.1, 0.2, 0.5),
-    });
-    let material_left: Arc<dyn Material> = Arc::new(Dielectric {
-        index_of_refraction: 1.5,
-    });
-    let material_right: Arc<dyn Material> = Arc::new(Metal {
-        albedo: Colour::new(0.8, 0.6, 0.2),
-        fuzz: 0.1,
-    });
-
-    let world: Vec<Box<dyn Hittable>> = vec![
-        Sphere {
-            centre: Point3::new(0, 0, -1),
-            radius: 0.5,
-            material: Arc::clone(&material_centre),
-        },
-        //Sphere {
-        //    centre: Point3::new(-1, 0, -1),
-        //    radius: 0.5,
-        //    material: Arc::clone(&material_left),
-        //},
-        Sphere {
-            centre: Point3::new(-1, 0, -1),
-            radius: -0.45,
-            material: Arc::clone(&material_left),
-        },
-        Sphere {
-            centre: Point3::new(1, 0, -1),
-            radius: 0.5,
-            material: Arc::clone(&material_right),
-        },
-        Sphere {
-            centre: Point3::new(0.0, -100.5, -1.0),
-            radius: 100.0,
-            material: Arc::clone(&material_ground),
-        },
-    ]
-    .into_iter()
-    .map(|s: Sphere| -> Box<dyn Hittable> { Box::new(s) })
-    .collect();
+    let world = random_scene();
 
     let samples_per_pixel = 100;
     let max_bounces = 50;
@@ -196,4 +153,80 @@ fn write_pixel<T: Write>(output: &mut T, c: Colour) -> Result<()> {
         .write(format!("{} {} {}\n", r, g, b).as_bytes())
         .and(Ok(()))
         .context(format!("Writing pixel {}", c))
+}
+
+fn random_scene() -> Vec<Box<dyn Hittable>> {
+    // Materials
+    let material_ground: Arc<dyn Material> = Arc::new(Lambertian {
+        albedo: Colour::new(0.5, 0.5, 0.5),
+    });
+    let material_glass: Arc<dyn Material> = Arc::new(Dielectric {
+        index_of_refraction: 1.5,
+    });
+    let material_matte: Arc<dyn Material> = Arc::new(Lambertian {
+        albedo: Colour::new(0.4, 0.2, 0.1),
+    });
+    let material_metal: Arc<dyn Material> = Arc::new(Metal {
+        albedo: Colour::new(0.7, 0.6, 0.5),
+        fuzz: 1.0,
+    });
+
+    // World
+    let mut world = Vec::new();
+
+    world.push(Sphere {
+        centre: Point3::new(0, -1000, 0),
+        radius: 1000.0,
+        material: Arc::clone(&material_ground),
+    });
+    world.push(Sphere {
+        centre: Point3::new(0, 1, 0),
+        radius: 1.0,
+        material: Arc::clone(&material_glass),
+    });
+    world.push(Sphere {
+        centre: Point3::new(-4, 1, 0),
+        radius: 1.0,
+        material: Arc::clone(&material_matte),
+    });
+    world.push(Sphere {
+        centre: Point3::new(4, 1, 0),
+        radius: 1.0,
+        material: Arc::clone(&material_metal),
+    });
+
+    let mut rng = rand::thread_rng();
+
+    for a in -11..11 {
+        for b in -11..11 {
+            let choose_mat = rng.gen_range(0.0..1.0);
+            let centre = Point3::new(
+                a as f64 + 0.9 * rng.gen_range(0.0..1.0),
+                0.2,
+                b as f64 + 0.9 * rng.gen_range(0.0..1.0),
+            );
+            if (centre - Point3::new(4.0, 0.2, 0.0)).length() > 0.9 {
+                let material: Arc<dyn Material> = if choose_mat < 0.8 {
+                    let albedo = coefficients(random_colour(0, 1), random_colour(0, 1));
+                    Arc::new(Lambertian { albedo })
+                } else if choose_mat < 0.95 {
+                    let albedo = random_colour(0.5, 1.0);
+                    let fuzz = rng.gen_range(0.0..0.5);
+                    Arc::new(Metal { albedo, fuzz })
+                } else {
+                    Arc::clone(&material_glass)
+                };
+                world.push(Sphere {
+                    centre,
+                    material,
+                    radius: 0.2,
+                });
+            }
+        }
+    }
+
+    world
+        .into_iter()
+        .map(|h| -> Box<dyn Hittable> { Box::new(h) })
+        .collect::<Vec<Box<dyn Hittable>>>()
 }

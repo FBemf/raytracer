@@ -1,3 +1,4 @@
+use rand::Rng;
 use std::sync::Arc;
 
 use crate::math::{Point3, Ray, Vec3};
@@ -66,4 +67,15 @@ where
     Self: Send + Sync,
 {
     fn scatter(&self, ray: &Ray, hit: &HitRecord) -> Option<(Ray, Colour)>;
+}
+
+pub fn random_colour<T: Into<f64>>(low: T, high: T) -> Colour {
+    let mut rng = rand::thread_rng();
+    let low: f64 = low.into();
+    let high: f64 = high.into();
+    Colour {
+        x: rng.gen_range(low..high),
+        y: rng.gen_range(low..high),
+        z: rng.gen_range(low..high),
+    }
 }

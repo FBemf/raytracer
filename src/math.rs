@@ -228,7 +228,7 @@ pub fn random_in_unit_disc() -> Vec3 {
 #[test]
 fn test_cross_product() {
     assert_eq!(
-        _cross_product(Vec3::new(1, 2, 3), Vec3::new(-2, 4, 6)),
+        cross_product(Vec3::new(1, 2, 3), Vec3::new(-2, 4, 6)),
         Vec3::new(0, -12, 8)
     );
 }
