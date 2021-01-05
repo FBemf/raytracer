@@ -1,4 +1,4 @@
-use crate::math::{cross_product, random_in_unit_disc, Point3, Ray, Vec3};
+use crate::math::{cross, random_in_unit_disc, Point3, Ray, Vec3};
 
 pub struct Camera {
     origin: Point3,
@@ -26,8 +26,8 @@ impl Camera {
         let viewport_width = aspect_ratio * viewport_height;
 
         let w = (look_from - look_at).unit_vector();
-        let u = cross_product(direction_up, w).unit_vector();
-        let v = cross_product(w, u);
+        let u = cross(direction_up, w).unit_vector();
+        let v = cross(w, u);
 
         let origin = look_from;
         let horizontal = focus_dist * viewport_width * u;
@@ -47,7 +47,7 @@ impl Camera {
             lens_radius,
         }
     }
-    pub fn cast_ray(&self, s: f64, t: f64) -> Ray {
+    pub fn find_ray(&self, s: f64, t: f64) -> Ray {
         let rd = self.lens_radius * random_in_unit_disc();
         let offset = self.u * rd.x + self.v * rd.y;
         Ray {

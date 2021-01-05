@@ -37,7 +37,7 @@ impl Vec3 {
     }
 }
 
-pub fn cross_product(lhs: Vec3, rhs: Vec3) -> Vec3 {
+pub fn cross(lhs: Vec3, rhs: Vec3) -> Vec3 {
     Vec3 {
         x: lhs.y * rhs.z - lhs.z * rhs.y,
         y: lhs.z * rhs.x - lhs.x * rhs.z,
@@ -45,7 +45,11 @@ pub fn cross_product(lhs: Vec3, rhs: Vec3) -> Vec3 {
     }
 }
 
-pub fn coefficients(lhs: Vec3, rhs: Vec3) -> Vec3 {
+pub fn dot(lhs: Vec3, rhs: Vec3) -> f64 {
+    lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z
+}
+
+pub fn coeff(lhs: Vec3, rhs: Vec3) -> Vec3 {
     Vec3 {
         x: lhs.x * rhs.x,
         y: lhs.y * rhs.y,
@@ -54,12 +58,12 @@ pub fn coefficients(lhs: Vec3, rhs: Vec3) -> Vec3 {
 }
 
 pub fn reflect(&direction: &Vec3, &normal: &Vec3) -> Vec3 {
-    direction - 2.0 * (direction * normal) * normal
+    direction - 2.0 * dot(direction, normal) * normal
 }
 
 pub fn refract(&direction: &Vec3, &normal: &Vec3, etai_over_etat: f64) -> Vec3 {
     let direction = direction.unit_vector();
-    let cos_theta = f64::min(-direction * normal, 1.0);
+    let cos_theta = f64::min(dot(-direction, normal), 1.0);
     let r_out_perpendicular = etai_over_etat * (direction + cos_theta * normal);
     let r_out_parallel = -((1.0 - r_out_perpendicular.length_squared()).abs().sqrt()) * normal;
     let result = r_out_perpendicular + r_out_parallel;
@@ -135,12 +139,12 @@ impl std::ops::Mul<Vec3> for f64 {
     }
 }
 
-impl std::ops::Mul for Vec3 {
-    type Output = f64;
-    fn mul(self, other: Vec3) -> f64 {
-        self.x * other.x + self.y * other.y + self.z * other.z
-    }
-}
+//impl std::ops::Mul for Vec3 {
+//    type Output = f64;
+//    fn mul(self, other: Vec3) -> f64 {
+//        self.x * other.x + self.y * other.y + self.z * other.z
+//    }
+//}
 
 impl std::ops::MulAssign<f64> for Vec3 {
     fn mul_assign(&mut self, other: f64) {
@@ -228,7 +232,7 @@ pub fn random_in_unit_disc() -> Vec3 {
 #[test]
 fn test_cross_product() {
     assert_eq!(
-        cross_product(Vec3::new(1, 2, 3), Vec3::new(-2, 4, 6)),
+        cross(Vec3::new(1, 2, 3), Vec3::new(-2, 4, 6)),
         Vec3::new(0, -12, 8)
     );
 }

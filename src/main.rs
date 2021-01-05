@@ -18,11 +18,11 @@ mod objects;
 mod progress;
 
 use camera::Camera;
-use hitting::{random_colour, Colour, Hittable, Material};
+use hitting::{cast_ray, random_colour, Colour, Hittable, Material};
 use materials::{Dielectric, Lambertian, Metal};
-use math::{clamp, coefficients, Point3, Ray, Vec3};
+use math::{clamp, coeff, Point3, Ray, Vec3};
 use objects::Sphere;
-use progress::Progress;
+use progress::{Progress, TimedProgressBar};
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "raytracer", about = "Raytracing in a weekend!")]
@@ -75,7 +75,7 @@ fn main() -> Result<()> {
     let (done_sender, done_receiver): (Sender<Result<()>>, Receiver<Result<()>>) = mpsc::channel();
     thread::spawn(move || {
         let mut progress =
-            Progress::new(&mut info, progress_bar_len, "Rendering", start_time.clone());
+            TimedProgressBar::new(&mut info, progress_bar_len, "Rendering", start_time.clone());
         for j in 0..image_height {
             let error = progress
                 .update(j as usize, image_height as usize)
@@ -94,7 +94,6 @@ fn main() -> Result<()> {
         .rev()
         .map(|j| (j, progress_sender.clone()))
         .collect::<Vec<(u32, mpsc::Sender<()>)>>()
-        //.iter()
         .into_par_iter()
         .map(|(j, sender)| {
             let mut rng = rand::thread_rng();
@@ -104,8 +103,8 @@ fn main() -> Result<()> {
                 for _ in 0..samples_per_pixel {
                     let u = (i as f64 + rng.gen_range(0.0..1.0)) / (image_width - 1) as f64;
                     let v = (j as f64 + rng.gen_range(0.0..1.0)) / (image_height - 1) as f64;
-                    let r = camera.cast_ray(u, v);
-                    colour += ray_colour(&r, &world, max_bounces);
+                    let r = camera.find_ray(u, v);
+                    colour += cast_ray(&r, &world, background, max_bounces);
                 }
                 colour /= samples_per_pixel as f64;
                 // correct for gamma=2.0 (raise to the power of 1/gamma, i.e. sqrt)
@@ -125,28 +124,15 @@ fn main() -> Result<()> {
     img.save(opt.file)?;
 
     let elapsed = start_time.elapsed().as_secs();
-    eprintln!("Completed in {}:{}.", elapsed / 60, elapsed % 60,);
+    eprintln!("Completed in {}:{:02}.", elapsed / 60, elapsed % 60,);
 
     Ok(())
 }
 
-fn ray_colour<T: Hittable>(ray: &Ray, world: &T, bounces: u32) -> Colour {
-    if bounces == 0 {
-        return Colour::new(0, 0, 0);
-    }
-    // min distance is 0.001, to prevent "shadow acne"
-    if let Some(hit) = world.hit(ray, 0.001, f64::INFINITY) {
-        let scattered = hit.material.scatter(ray, &hit);
-        if let Some((ray, attenuation)) = scattered {
-            coefficients(attenuation, ray_colour(&ray, world, bounces - 1))
-        } else {
-            Colour::new(0, 0, 0)
-        }
-    } else {
-        let unit_direction = ray.direction.unit_vector();
-        let t = 0.5 * (unit_direction.y + 1.0);
-        (1.0 - t) * Colour::new(1, 1, 1) + t * Colour::new(0.5, 0.7, 1.0)
-    }
+fn background(ray: &Ray) -> Colour {
+    let unit_direction = ray.direction.unit_vector();
+    let t = 0.5 * (unit_direction.y + 1.0);
+    (1.0 - t) * Colour::new(1, 1, 1) + t * Colour::new(0.5, 0.7, 1.0)
 }
 
 fn colour_to_raw(c: Colour) -> Vec<u8> {
@@ -196,7 +182,7 @@ fn random_scene() -> Vec<Box<dyn Hittable>> {
             );
             if (centre - Point3::new(4.0, 0.2, 0.0)).length() > 0.9 {
                 let material: Arc<dyn Material> = if choose_mat < 0.8 {
-                    let albedo = coefficients(random_colour(0, 1), random_colour(0, 1));
+                    let albedo = coeff(random_colour(0, 1), random_colour(0, 1));
                     Arc::new(Lambertian { albedo })
                 } else if choose_mat < 0.95 {
                     let albedo = random_colour(0.5, 1.0);

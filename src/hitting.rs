@@ -1,9 +1,31 @@
 use rand::Rng;
 use std::sync::Arc;
 
-use crate::math::{Point3, Ray, Vec3};
+use crate::math::{coeff, dot, Point3, Ray, Vec3};
 
 pub type Colour = Vec3;
+
+pub fn cast_ray<T: Hittable, H: Fn(&Ray) -> Colour>(
+    ray: &Ray,
+    world: &T,
+    sky: H,
+    bounces: u32,
+) -> Colour {
+    if bounces == 0 {
+        return Colour::new(0, 0, 0);
+    }
+    // min distance is 0.001, to prevent "shadow acne"
+    if let Some(hit) = world.hit(ray, 0.001, f64::INFINITY) {
+        let scattered = hit.material.scatter(ray, &hit);
+        if let Some((ray, attenuation)) = scattered {
+            coeff(attenuation, cast_ray(&ray, world, sky, bounces - 1))
+        } else {
+            Colour::new(0, 0, 0)
+        }
+    } else {
+        sky(ray)
+    }
+}
 
 pub struct HitRecord {
     pub intersection: Point3,
@@ -20,7 +42,7 @@ impl HitRecord {
         outward_normal: Vec3,
         material: Arc<dyn Material>,
     ) -> Self {
-        let front_face = ray.direction * outward_normal < 0.0;
+        let front_face = dot(ray.direction, outward_normal) < 0.0;
         let normal = if front_face {
             outward_normal.unit_vector()
         } else {

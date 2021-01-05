@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::hitting::{HitRecord, Hittable, Material};
-use crate::math::{Point3, Ray};
+use crate::math::{dot, Point3, Ray};
 
 pub struct Sphere {
     pub centre: Point3,
@@ -23,7 +23,7 @@ impl Hittable for Sphere {
     fn hit(&self, ray: &Ray, min_dist: f64, max_dist: f64) -> Option<HitRecord> {
         let oc = ray.origin - self.centre;
         let a = ray.direction.length_squared();
-        let half_b = oc * ray.direction;
+        let half_b = dot(oc, ray.direction);
         let c = oc.length_squared() - self.radius * self.radius;
         let discriminant = half_b * half_b - a * c;
 

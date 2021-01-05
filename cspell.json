@@ -12,6 +12,7 @@
         "powf",
         "structopt",
         "raytracer",
-        "raytracing"
+        "raytracing",
+        "coeff"
     ]
 }

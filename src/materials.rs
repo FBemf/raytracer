@@ -1,7 +1,7 @@
 use rand::Rng;
 
 use crate::hitting::{Colour, HitRecord, Material};
-use crate::math::{random_in_unit_sphere, random_unit_vector, reflect, refract, Ray};
+use crate::math::{dot, random_in_unit_sphere, random_unit_vector, reflect, refract, Ray};
 
 pub struct Lambertian {
     pub albedo: Colour,
@@ -39,7 +39,7 @@ impl Material for Metal {
             origin: hit.intersection,
             direction: reflected + self.fuzz * random_in_unit_sphere(),
         };
-        if scattered.direction * hit.normal > 0.0 {
+        if dot(scattered.direction, hit.normal) > 0.0 {
             Some((scattered, self.albedo))
         } else {
             None
@@ -60,7 +60,7 @@ impl Material for Dielectric {
         };
         let unit_direction = ray.direction.unit_vector();
 
-        let cos_theta = f64::min(-unit_direction * hit.normal, 1.0);
+        let cos_theta = f64::min(dot(-unit_direction, hit.normal), 1.0);
         let sin_theta = (1.0 - cos_theta * cos_theta).sqrt();
         let cannot_refract = refraction_ratio * sin_theta > 1.0;
         let random_fraction = rand::thread_rng().gen_range(0.0..1.0);
