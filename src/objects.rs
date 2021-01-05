@@ -9,6 +9,16 @@ pub struct Sphere {
     pub material: Arc<dyn Material>,
 }
 
+impl Sphere {
+    pub fn new(centre: Point3, radius: f64, material: &Arc<dyn Material>) -> Box<dyn Hittable> {
+        Box::new(Sphere {
+            centre,
+            radius,
+            material: Arc::clone(material),
+        })
+    }
+}
+
 impl Hittable for Sphere {
     fn hit(&self, ray: &Ray, min_dist: f64, max_dist: f64) -> Option<HitRecord> {
         let oc = ray.origin - self.centre;

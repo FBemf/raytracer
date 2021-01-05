@@ -1,11 +1,14 @@
 use anyhow::{Context, Result};
+use image::{ImageBuffer, RgbImage};
 use rand::Rng;
 use rayon::prelude::*;
-use std::io::{self, Write};
+use std::io;
+use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::Arc;
 use std::thread;
 use std::time::Instant;
+use structopt::StructOpt;
 
 mod camera;
 mod hitting;
@@ -21,9 +24,19 @@ use math::{clamp, coefficients, Point3, Ray, Vec3};
 use objects::Sphere;
 use progress::Progress;
 
+#[derive(Debug, StructOpt)]
+#[structopt(name = "raytracer", about = "Raytracing in a weekend!")]
+struct Opt {
+    /// Output file
+    #[structopt(parse(from_os_str))]
+    file: PathBuf,
+}
+
 fn main() -> Result<()> {
+    // cli args
+    let opt = Opt::from_args();
+
     // Output streams
-    let mut output = io::stdout();
     let mut info = io::stderr();
 
     // Image
@@ -61,8 +74,8 @@ fn main() -> Result<()> {
     let (progress_sender, progress_receiver): (Sender<()>, Receiver<()>) = mpsc::channel();
     let (done_sender, done_receiver): (Sender<Result<()>>, Receiver<Result<()>>) = mpsc::channel();
     thread::spawn(move || {
-        let mut progress = Progress::new(&mut info, progress_bar_len);
-        progress.set_label("Rendering");
+        let mut progress =
+            Progress::new(&mut info, progress_bar_len, "Rendering", start_time.clone());
         for j in 0..image_height {
             let error = progress
                 .update(j as usize, image_height as usize)
@@ -83,9 +96,9 @@ fn main() -> Result<()> {
         .collect::<Vec<(u32, mpsc::Sender<()>)>>()
         //.iter()
         .into_par_iter()
-        .map(|(j, sender)| -> Result<Vec<Colour>> {
+        .map(|(j, sender)| {
             let mut rng = rand::thread_rng();
-            let mut row = Vec::with_capacity(image_width as usize);
+            let mut row = Vec::with_capacity(3 * image_width as usize);
             for i in 0..image_width {
                 let mut colour = Vec3::new(0, 0, 0);
                 for _ in 0..samples_per_pixel {
@@ -98,30 +111,21 @@ fn main() -> Result<()> {
                 // correct for gamma=2.0 (raise to the power of 1/gamma, i.e. sqrt)
                 let gamma_corrected =
                     Colour::new(colour.x.sqrt(), colour.y.sqrt(), colour.z.sqrt());
-                row.push(gamma_corrected);
+                row.append(&mut colour_to_raw(gamma_corrected));
             }
             sender.send(()).unwrap();
-            return Ok(row);
+            return row;
         })
-        .collect::<Result<Vec<Vec<Colour>>>>()?;
+        .flatten()
+        .collect::<Vec<u8>>();
 
     done_receiver.recv()??;
-    let mut info = io::stderr();
-    let mut progress = Progress::new(&mut info, progress_bar_len);
-    progress.set_label("Printing");
-    output.write(format!("P3\n{} {}\n255\n", image_width, image_height).as_bytes())?;
-    for (i, row) in pixels.iter().enumerate() {
-        progress.update(i, pixels.len())?;
-        for &colour in row {
-            write_pixel(&mut output, colour)?;
-        }
-    }
-    progress.clear()?;
 
-    eprintln!(
-        "Completed in {:.2} seconds.",
-        start_time.elapsed().as_secs_f32()
-    );
+    let img: RgbImage = ImageBuffer::from_raw(image_width, image_height, pixels).unwrap();
+    img.save(opt.file)?;
+
+    let elapsed = start_time.elapsed().as_secs();
+    eprintln!("Completed in {}:{}.", elapsed / 60, elapsed % 60,);
 
     Ok(())
 }
@@ -145,14 +149,11 @@ fn ray_colour<T: Hittable>(ray: &Ray, world: &T, bounces: u32) -> Colour {
     }
 }
 
-fn write_pixel<T: Write>(output: &mut T, c: Colour) -> Result<()> {
-    let r = (255.0 * clamp(c.x.abs(), 0.0, 0.999)).floor() as u32;
-    let g = (255.0 * clamp(c.y.abs(), 0.0, 0.999)).floor() as u32;
-    let b = (255.0 * clamp(c.z.abs(), 0.0, 0.999)).floor() as u32;
-    output
-        .write(format!("{} {} {}\n", r, g, b).as_bytes())
-        .and(Ok(()))
-        .context(format!("Writing pixel {}", c))
+fn colour_to_raw(c: Colour) -> Vec<u8> {
+    let r = (255.0 * clamp(c.x.abs(), 0.0, 0.999)).floor() as u8;
+    let g = (255.0 * clamp(c.y.abs(), 0.0, 0.999)).floor() as u8;
+    let b = (255.0 * clamp(c.z.abs(), 0.0, 0.999)).floor() as u8;
+    vec![r, g, b]
 }
 
 fn random_scene() -> Vec<Box<dyn Hittable>> {
@@ -168,32 +169,20 @@ fn random_scene() -> Vec<Box<dyn Hittable>> {
     });
     let material_metal: Arc<dyn Material> = Arc::new(Metal {
         albedo: Colour::new(0.7, 0.6, 0.5),
-        fuzz: 1.0,
+        fuzz: 0.0,
     });
 
     // World
     let mut world = Vec::new();
 
-    world.push(Sphere {
-        centre: Point3::new(0, -1000, 0),
-        radius: 1000.0,
-        material: Arc::clone(&material_ground),
-    });
-    world.push(Sphere {
-        centre: Point3::new(0, 1, 0),
-        radius: 1.0,
-        material: Arc::clone(&material_glass),
-    });
-    world.push(Sphere {
-        centre: Point3::new(-4, 1, 0),
-        radius: 1.0,
-        material: Arc::clone(&material_matte),
-    });
-    world.push(Sphere {
-        centre: Point3::new(4, 1, 0),
-        radius: 1.0,
-        material: Arc::clone(&material_metal),
-    });
+    world.push(Sphere::new(
+        Point3::new(0, -1000, 0),
+        1000.0,
+        &material_ground,
+    ));
+    world.push(Sphere::new(Point3::new(0, 1, 0), 1.0, &material_glass));
+    world.push(Sphere::new(Point3::new(-4, 1, 0), 1.0, &material_matte));
+    world.push(Sphere::new(Point3::new(4, 1, 0), 1.0, &material_metal));
 
     let mut rng = rand::thread_rng();
 
@@ -216,17 +205,10 @@ fn random_scene() -> Vec<Box<dyn Hittable>> {
                 } else {
                     Arc::clone(&material_glass)
                 };
-                world.push(Sphere {
-                    centre,
-                    material,
-                    radius: 0.2,
-                });
+                world.push(Sphere::new(centre, 0.2, &material));
             }
         }
     }
 
     world
-        .into_iter()
-        .map(|h| -> Box<dyn Hittable> { Box::new(h) })
-        .collect::<Vec<Box<dyn Hittable>>>()
 }
