@@ -28,7 +28,7 @@ fn main() -> Result<()> {
 
     // Image
     let aspect_ratio = 3.0 / 2.0;
-    let image_width = 120;
+    let image_width = 1200;
     let image_height = (image_width as f64 / aspect_ratio).round() as u32;
 
     // UI

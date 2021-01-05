@@ -22,7 +22,7 @@ impl<'a> Progress<'a> {
 
     pub fn update(&mut self, numerator: usize, denominator: usize) -> Result<()> {
         let progress = 2 * numerator * self.length / denominator;
-        let remainder = self.length - progress;
+        let remainder = 2 * self.length - progress;
         self.stream
             .write(
                 format!(
@@ -30,7 +30,7 @@ impl<'a> Progress<'a> {
                     self.label,
                     ":".repeat(progress / 2),
                     if progress % 2 == 1 { "." } else { "" },
-                    " ".repeat(remainder)
+                    " ".repeat(remainder / 2)
                 )
                 .as_bytes(),
             )
