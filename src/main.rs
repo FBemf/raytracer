@@ -3,23 +3,26 @@ use rand::Rng;
 use rayon::prelude::*;
 use std::io::{self, Write};
 use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::Arc;
 use std::thread;
 use std::time::Instant;
 
 mod camera;
 mod hitting;
+mod materials;
 mod math;
+mod objects;
 mod progress;
 
 use camera::Camera;
-use hitting::{Hittable, Sphere};
-use math::{Point3, Ray, Vec3};
+use hitting::{Colour, Hittable, Material};
+use materials::{Dielectric, Lambertian, Metal};
+use math::{clamp, coefficients, Point3, Ray, Vec3};
+use objects::Sphere;
 use progress::Progress;
 
-type Colour = Vec3;
-
 fn main() -> Result<()> {
-    // Output
+    // Output streams
     let mut output = io::stdout();
     let mut info = io::stderr();
 
@@ -27,32 +30,67 @@ fn main() -> Result<()> {
     let aspect_ratio = 16.0 / 9.0;
     let image_width = 400;
     let image_height = (image_width as f64 / aspect_ratio).round() as u32;
-    let viewport_height = 2.0;
-    let focal_length = 3.0;
 
     // UI
     let progress_bar_len = 80;
-
-    let camera = Camera::new(image_width, image_height, viewport_height, focal_length);
-
     let start_time = Instant::now();
+
+    // Camera
+    let look_from = Point3::new(3, 3, 2);
+    let look_at = Point3::new(0, 0, -1);
+    let direction_up = Vec3::new(0, 1, 0);
+    let field_of_view = 20;
+    let aperture = 2.0;
+    let camera = Camera::new(
+        look_from,
+        look_at,
+        direction_up,
+        field_of_view,
+        aspect_ratio,
+        aperture,
+        (look_from - look_at).length(),
+    );
+
+    // Materials
+    let material_ground: Arc<dyn Material> = Arc::new(Lambertian {
+        albedo: Colour::new(0.8, 0.8, 0.0),
+    });
+    let material_centre: Arc<dyn Material> = Arc::new(Lambertian {
+        albedo: Colour::new(0.1, 0.2, 0.5),
+    });
+    let material_left: Arc<dyn Material> = Arc::new(Dielectric {
+        index_of_refraction: 1.5,
+    });
+    let material_right: Arc<dyn Material> = Arc::new(Metal {
+        albedo: Colour::new(0.8, 0.6, 0.2),
+        fuzz: 0.1,
+    });
 
     let world: Vec<Box<dyn Hittable>> = vec![
         Sphere {
-            centre: Point3::new(0, 0, -3),
+            centre: Point3::new(0, 0, -1),
             radius: 0.5,
+            material: Arc::clone(&material_centre),
+        },
+        //Sphere {
+        //    centre: Point3::new(-1, 0, -1),
+        //    radius: 0.5,
+        //    material: Arc::clone(&material_left),
+        //},
+        Sphere {
+            centre: Point3::new(-1, 0, -1),
+            radius: -0.45,
+            material: Arc::clone(&material_left),
         },
         Sphere {
-            centre: Point3::new(-1.5, 0.5, -4.0),
+            centre: Point3::new(1, 0, -1),
             radius: 0.5,
-        },
-        Sphere {
-            centre: Point3::new(1, 1, -4),
-            radius: 0.5,
+            material: Arc::clone(&material_right),
         },
         Sphere {
             centre: Point3::new(0.0, -100.5, -1.0),
             radius: 100.0,
+            material: Arc::clone(&material_ground),
         },
     ]
     .into_iter()
@@ -97,10 +135,13 @@ fn main() -> Result<()> {
                     let u = (i as f64 + rng.gen_range(0.0..1.0)) / (image_width - 1) as f64;
                     let v = (j as f64 + rng.gen_range(0.0..1.0)) / (image_height - 1) as f64;
                     let r = camera.cast_ray(u, v);
-                    colour += ray_colour(&r, &world, max_bounces, &mut rng);
+                    colour += ray_colour(&r, &world, max_bounces);
                 }
                 colour /= samples_per_pixel as f64;
-                row.push(colour);
+                // correct for gamma=2.0 (raise to the power of 1/gamma, i.e. sqrt)
+                let gamma_corrected =
+                    Colour::new(colour.x.sqrt(), colour.y.sqrt(), colour.z.sqrt());
+                row.push(gamma_corrected);
             }
             sender.send(()).unwrap();
             return Ok(row);
@@ -128,38 +169,22 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn ray_colour<T: Hittable, U: Rng>(ray: &Ray, world: &T, bounces: u32, rng: &mut U) -> Colour {
-    if let Some(hit) = world.hit(ray, 0.0, f64::INFINITY) {
-        let target = hit.intersection + hit.normal + random_in_unit_sphere(rng);
-        return if bounces > 0 {
-            0.5 * ray_colour(
-                &Ray {
-                    origin: hit.intersection,
-                    direction: target,
-                },
-                world,
-                bounces - 1,
-                rng,
-            )
+fn ray_colour<T: Hittable>(ray: &Ray, world: &T, bounces: u32) -> Colour {
+    if bounces == 0 {
+        return Colour::new(0, 0, 0);
+    }
+    // min distance is 0.001, to prevent "shadow acne"
+    if let Some(hit) = world.hit(ray, 0.001, f64::INFINITY) {
+        let scattered = hit.material.scatter(ray, &hit);
+        if let Some((ray, attenuation)) = scattered {
+            coefficients(attenuation, ray_colour(&ray, world, bounces - 1))
         } else {
             Colour::new(0, 0, 0)
-        };
-    }
-    let unit_direction = ray.direction.unit_vector();
-    let t = 0.5 * (unit_direction.y + 1.0);
-    (1.0 - t) * Colour::new(1, 1, 1) + t * Colour::new(0.5, 0.7, 1.0)
-}
-
-fn random_in_unit_sphere<T: Rng>(rng: &mut T) -> Vec3 {
-    loop {
-        let p = Vec3::new(
-            rng.gen_range(0.0..1.0),
-            rng.gen_range(0.0..1.0),
-            rng.gen_range(0.0..1.0),
-        );
-        if p.length_squared() < 1.0 {
-            return p;
         }
+    } else {
+        let unit_direction = ray.direction.unit_vector();
+        let t = 0.5 * (unit_direction.y + 1.0);
+        (1.0 - t) * Colour::new(1, 1, 1) + t * Colour::new(0.5, 0.7, 1.0)
     }
 }
 
@@ -171,14 +196,4 @@ fn write_pixel<T: Write>(output: &mut T, c: Colour) -> Result<()> {
         .write(format!("{} {} {}\n", r, g, b).as_bytes())
         .and(Ok(()))
         .context(format!("Writing pixel {}", c))
-}
-
-fn clamp(a: f64, min: f64, max: f64) -> f64 {
-    if a < min {
-        min
-    } else if a > max {
-        max
-    } else {
-        a
-    }
 }

@@ -1,3 +1,4 @@
+use rand::Rng;
 use std::fmt;
 
 pub type Point3 = Vec3;
@@ -7,14 +8,6 @@ pub struct Vec3 {
     pub x: f64,
     pub y: f64,
     pub z: f64,
-}
-
-pub fn _cross_product(lhs: Vec3, rhs: Vec3) -> Vec3 {
-    Vec3 {
-        x: lhs.y * rhs.z - lhs.z * rhs.y,
-        y: lhs.z * rhs.x - lhs.x * rhs.z,
-        z: lhs.x * rhs.y - lhs.y * rhs.z,
-    }
 }
 
 impl Vec3 {
@@ -38,6 +31,39 @@ impl Vec3 {
             z: self.z / self.length(),
         }
     }
+    pub fn near_zero(&self) -> bool {
+        let d = 1e-8;
+        self.x.abs() < d && self.y.abs() < d && self.z.abs() < d
+    }
+}
+
+pub fn cross_product(lhs: Vec3, rhs: Vec3) -> Vec3 {
+    Vec3 {
+        x: lhs.y * rhs.z - lhs.z * rhs.y,
+        y: lhs.z * rhs.x - lhs.x * rhs.z,
+        z: lhs.x * rhs.y - lhs.y * rhs.x,
+    }
+}
+
+pub fn coefficients(lhs: Vec3, rhs: Vec3) -> Vec3 {
+    Vec3 {
+        x: lhs.x * rhs.x,
+        y: lhs.y * rhs.y,
+        z: lhs.z * rhs.z,
+    }
+}
+
+pub fn reflect(&direction: &Vec3, &normal: &Vec3) -> Vec3 {
+    direction - 2.0 * (direction * normal) * normal
+}
+
+pub fn refract(&direction: &Vec3, &normal: &Vec3, etai_over_etat: f64) -> Vec3 {
+    let direction = direction.unit_vector();
+    let cos_theta = f64::min(-direction * normal, 1.0);
+    let r_out_perpendicular = etai_over_etat * (direction + cos_theta * normal);
+    let r_out_parallel = -((1.0 - r_out_perpendicular.length_squared()).abs().sqrt()) * normal;
+    let result = r_out_perpendicular + r_out_parallel;
+    result
 }
 
 impl std::ops::Add for Vec3 {
@@ -158,5 +184,61 @@ pub struct Ray {
 impl Ray {
     pub fn at(&self, t: f64) -> Point3 {
         self.origin + t * self.direction
+    }
+}
+
+pub fn clamp(a: f64, min: f64, max: f64) -> f64 {
+    if a < min {
+        min
+    } else if a > max {
+        max
+    } else {
+        a
+    }
+}
+
+pub fn random_unit_vector() -> Vec3 {
+    random_in_unit_sphere().unit_vector()
+}
+
+pub fn random_in_unit_sphere() -> Vec3 {
+    let mut rng = rand::thread_rng();
+    loop {
+        let p = Vec3::new(
+            rng.gen_range(0.0..1.0),
+            rng.gen_range(0.0..1.0),
+            rng.gen_range(0.0..1.0),
+        );
+        if p.length_squared() <= 1.0 {
+            return p;
+        }
+    }
+}
+
+pub fn random_in_unit_disc() -> Vec3 {
+    let mut rng = rand::thread_rng();
+    loop {
+        let p = Vec3::new(rng.gen_range(0.0..1.0), rng.gen_range(0.0..1.0), 0.0);
+        if p.length_squared() <= 1.0 {
+            return p;
+        }
+    }
+}
+
+#[test]
+fn test_cross_product() {
+    assert_eq!(
+        _cross_product(Vec3::new(1, 2, 3), Vec3::new(-2, 4, 6)),
+        Vec3::new(0, -12, 8)
+    );
+}
+
+#[test]
+fn test_refract() {
+    for _ in 0..100 {
+        let a = random_unit_vector();
+        let b = (random_unit_vector() - (2.0 * a)).unit_vector();
+        let c = refract(&a, &b, 1.0);
+        assert!((a - c).near_zero());
     }
 }
