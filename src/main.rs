@@ -19,7 +19,7 @@ mod progress;
 
 use camera::Camera;
 use hitting::{cast_ray, random_colour, Colour, Hittable, Material};
-use materials::{Dielectric, Lambertian, Luminescent, LuminescentMetal, Metal};
+use materials::{Dielectric, Lambertian, Metal};
 use math::{clamp, coeff, Point3, Ray, Vec3};
 use objects::Sphere;
 use progress::{Progress, TimedProgressBar};
@@ -41,7 +41,7 @@ fn main() -> Result<()> {
 
     // Image
     let aspect_ratio = 3.0 / 2.0;
-    let image_width = 1200;
+    let image_width = 400;
     let image_height = (image_width as f64 / aspect_ratio).round() as u32;
 
     // UI
@@ -67,7 +67,7 @@ fn main() -> Result<()> {
 
     let world = random_scene();
 
-    let samples_per_pixel = 100;
+    let samples_per_pixel = 50;
     let max_bounces = 50;
 
     // Print progress
@@ -137,7 +137,7 @@ fn main() -> Result<()> {
 fn background(ray: &Ray) -> Colour {
     let unit_direction = ray.direction.unit_vector();
     let t = 0.5 * (unit_direction.y + 1.0);
-    0.1 * ((1.0 - t) * Colour::new(1, 1, 1) + t * Colour::new(0.5, 0.7, 1.0))
+    1.0 * ((1.0 - t) * Colour::new(1, 1, 1) + t * Colour::new(0.5, 0.7, 1.0))
 }
 
 fn colour_to_raw(c: Colour) -> Vec<u8> {
@@ -149,9 +149,6 @@ fn colour_to_raw(c: Colour) -> Vec<u8> {
 
 fn random_scene() -> Vec<Box<dyn Hittable>> {
     // Materials
-    let material_bright: Arc<dyn Material> = Arc::new(Luminescent {
-        light_colour: Colour::new(1.0, 1.0, 0.7),
-    });
     let material_ground: Arc<dyn Material> = Arc::new(Lambertian {
         albedo: Colour::new(0.5, 0.5, 0.5),
     });
@@ -169,7 +166,6 @@ fn random_scene() -> Vec<Box<dyn Hittable>> {
     // World
     let mut world = Vec::new();
 
-    world.push(Sphere::new(Point3::new(2, 12, 4), 5.0, &material_bright));
     world.push(Sphere::new(
         Point3::new(0, -1000, 0),
         1000.0,
@@ -199,13 +195,11 @@ fn random_scene() -> Vec<Box<dyn Hittable>> {
                         let albedo = random_colour(0.5, 1.0);
                         let fuzz = rng.gen_range(0.0..0.5);
                         Arc::new(Metal { albedo, fuzz })
-                    } else if choose_mat < 0.85 {
+                    } else if choose_mat < 0.9 {
                         Arc::clone(&material_glass)
-                    } else if choose_mat < 0.95 {
+                    } else {
                         let colour = random_colour(0.0, 1.0);
                         Arc::new(LuminescentMetal::with_colour(colour, 0.0, 0.6))
-                    } else {
-                        Arc::clone(&material_bright)
                     };
                     world.push(Sphere::new(centre, 0.2, &material));
                 }

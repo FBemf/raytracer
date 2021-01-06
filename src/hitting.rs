@@ -16,11 +16,8 @@ pub fn cast_ray<T: Hittable, H: Fn(&Ray) -> Colour>(
     }
     // min distance is 0.001, to prevent "shadow acne"
     if let Some(hit) = world.hit(ray, 0.001, f64::INFINITY) {
-        match hit.material.scatter(ray, &hit) {
-            ScatterResult::Scattered(ray, attenuation) => {
-                coeff(attenuation, cast_ray(&ray, world, sky, bounces - 1))
-            }
-            ScatterResult::Emitted(colour) => colour,
+        if let Some((ray, attenuation)) = hit.material.scatter(ray, &hit) {
+            coeff(attenuation, cast_ray(&ray, world, sky, bounces - 1))
         }
     } else {
         sky(ray)
@@ -88,7 +85,7 @@ pub trait Material
 where
     Self: Send + Sync,
 {
-    fn scatter(&self, ray: &Ray, hit: &HitRecord) -> ScatterResult;
+    fn scatter(&self, ray: &Ray, hit: &HitRecord) -> Option<(Ray, Colour)>;
 }
 
 pub fn random_colour<T: Into<f64>>(low: T, high: T) -> Colour {
@@ -100,9 +97,4 @@ pub fn random_colour<T: Into<f64>>(low: T, high: T) -> Colour {
         y: rng.gen_range(low..high),
         z: rng.gen_range(low..high),
     }
-}
-
-pub enum ScatterResult {
-    Scattered(Ray, Colour),
-    Emitted(Colour),
 }
