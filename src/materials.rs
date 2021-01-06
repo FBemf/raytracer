@@ -1,6 +1,6 @@
 use rand::Rng;
 
-use crate::hitting::{Colour, HitRecord, Material};
+use crate::hitting::{Colour, HitRecord, Material, ScatterResult};
 use crate::math::{dot, random_in_unit_sphere, random_unit_vector, reflect, refract, Ray};
 
 pub struct Lambertian {
@@ -8,7 +8,7 @@ pub struct Lambertian {
 }
 
 impl Material for Lambertian {
-    fn scatter(&self, _ray: &Ray, hit: &HitRecord) -> Option<(Ray, Colour)> {
+    fn scatter(&self, _ray: &Ray, hit: &HitRecord) -> ScatterResult {
         let scatter_direction = hit.normal + random_unit_vector();
         // catch degenerate scatter direction
         let scatter_direction = if scatter_direction.near_zero() {
@@ -20,7 +20,7 @@ impl Material for Lambertian {
             origin: hit.intersection,
             direction: scatter_direction,
         };
-        Some((scattered, self.albedo))
+        ScatterResult::Scattered(scattered, self.albedo)
     }
 }
 
@@ -30,7 +30,7 @@ pub struct Metal {
 }
 
 impl Material for Metal {
-    fn scatter(&self, ray: &Ray, hit: &HitRecord) -> Option<(Ray, Colour)> {
+    fn scatter(&self, ray: &Ray, hit: &HitRecord) -> ScatterResult {
         if (ray.origin - hit.intersection).near_zero() {
             dbg!("immediate bounce");
         }
@@ -40,9 +40,9 @@ impl Material for Metal {
             direction: reflected + self.fuzz * random_in_unit_sphere(),
         };
         if dot(scattered.direction, hit.normal) > 0.0 {
-            Some((scattered, self.albedo))
+            ScatterResult::Scattered(scattered, self.albedo)
         } else {
-            None
+            ScatterResult::Emitted(Colour::new(0, 0, 0))
         }
     }
 }
@@ -52,7 +52,7 @@ pub struct Dielectric {
 }
 
 impl Material for Dielectric {
-    fn scatter(&self, ray: &Ray, hit: &HitRecord) -> Option<(Ray, Colour)> {
+    fn scatter(&self, ray: &Ray, hit: &HitRecord) -> ScatterResult {
         let refraction_ratio = if hit.front_face {
             1.0 / self.index_of_refraction
         } else {
@@ -72,13 +72,13 @@ impl Material for Dielectric {
                 refract(&unit_direction, &hit.normal, refraction_ratio)
             };
 
-        Some((
+        ScatterResult::Scattered(
             Ray {
                 origin: hit.intersection,
                 direction: direction,
             },
             Colour::new(1.0, 1.0, 1.0),
-        ))
+        )
     }
 }
 
@@ -86,4 +86,45 @@ fn reflectance(cosine: f64, ref_idx: f64) -> f64 {
     let r0 = (1.1 - ref_idx) / (1.0 + ref_idx);
     let r0 = r0 * r0;
     r0 + (1.0 - r0) * (1.0 - cosine).powf(5.0)
+}
+
+pub struct Luminescent {
+    pub light_colour: Colour,
+}
+
+impl Material for Luminescent {
+    fn scatter(&self, _ray: &Ray, _hit: &HitRecord) -> ScatterResult {
+        ScatterResult::Emitted(self.light_colour)
+    }
+}
+
+pub struct LuminescentMetal {
+    pub luminescent: Luminescent,
+    pub metal: Metal,
+    pub chance_to_emit: f64,
+}
+
+impl LuminescentMetal {
+    pub fn with_colour(colour: Colour, fuzz: f64, chance_to_emit: f64) -> LuminescentMetal {
+        LuminescentMetal {
+            luminescent: Luminescent {
+                light_colour: colour,
+            },
+            metal: Metal {
+                fuzz,
+                albedo: colour,
+            },
+            chance_to_emit,
+        }
+    }
+}
+
+impl Material for LuminescentMetal {
+    fn scatter(&self, ray: &Ray, hit: &HitRecord) -> ScatterResult {
+        if rand::thread_rng().gen_range(0.0..1.0) <= self.chance_to_emit {
+            self.luminescent.scatter(ray, hit)
+        } else {
+            self.metal.scatter(ray, hit)
+        }
+    }
 }

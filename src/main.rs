@@ -19,7 +19,7 @@ mod progress;
 
 use camera::Camera;
 use hitting::{cast_ray, random_colour, Colour, Hittable, Material};
-use materials::{Dielectric, Lambertian, Metal};
+use materials::{Dielectric, Lambertian, Luminescent, LuminescentMetal, Metal};
 use math::{clamp, coeff, Point3, Ray, Vec3};
 use objects::Sphere;
 use progress::{Progress, TimedProgressBar};
@@ -74,8 +74,13 @@ fn main() -> Result<()> {
     let (progress_sender, progress_receiver): (Sender<()>, Receiver<()>) = mpsc::channel();
     let (done_sender, done_receiver): (Sender<Result<()>>, Receiver<Result<()>>) = mpsc::channel();
     thread::spawn(move || {
-        let mut progress =
-            TimedProgressBar::new(&mut info, progress_bar_len, "Rendering", start_time.clone());
+        let mut progress = TimedProgressBar::new(
+            &mut info,
+            progress_bar_len,
+            "Rendering",
+            " -=≡",
+            start_time.clone(),
+        );
         for j in 0..image_height {
             let error = progress
                 .update(j as usize, image_height as usize)
@@ -124,7 +129,7 @@ fn main() -> Result<()> {
     img.save(opt.file)?;
 
     let elapsed = start_time.elapsed().as_secs();
-    eprintln!("Completed in {}:{:02}.", elapsed / 60, elapsed % 60,);
+    eprintln!("Completed in {}:{:02}", elapsed / 60, elapsed % 60,);
 
     Ok(())
 }
@@ -132,7 +137,7 @@ fn main() -> Result<()> {
 fn background(ray: &Ray) -> Colour {
     let unit_direction = ray.direction.unit_vector();
     let t = 0.5 * (unit_direction.y + 1.0);
-    (1.0 - t) * Colour::new(1, 1, 1) + t * Colour::new(0.5, 0.7, 1.0)
+    0.1 * ((1.0 - t) * Colour::new(1, 1, 1) + t * Colour::new(0.5, 0.7, 1.0))
 }
 
 fn colour_to_raw(c: Colour) -> Vec<u8> {
@@ -144,6 +149,9 @@ fn colour_to_raw(c: Colour) -> Vec<u8> {
 
 fn random_scene() -> Vec<Box<dyn Hittable>> {
     // Materials
+    let material_bright: Arc<dyn Material> = Arc::new(Luminescent {
+        light_colour: Colour::new(1.0, 1.0, 0.7),
+    });
     let material_ground: Arc<dyn Material> = Arc::new(Lambertian {
         albedo: Colour::new(0.5, 0.5, 0.5),
     });
@@ -161,6 +169,7 @@ fn random_scene() -> Vec<Box<dyn Hittable>> {
     // World
     let mut world = Vec::new();
 
+    world.push(Sphere::new(Point3::new(2, 12, 4), 5.0, &material_bright));
     world.push(Sphere::new(
         Point3::new(0, -1000, 0),
         1000.0,
@@ -171,27 +180,35 @@ fn random_scene() -> Vec<Box<dyn Hittable>> {
     world.push(Sphere::new(Point3::new(4, 1, 0), 1.0, &material_metal));
 
     let mut rng = rand::thread_rng();
+    let sparsity = 1.0;
 
     for a in -11..11 {
         for b in -11..11 {
-            let choose_mat = rng.gen_range(0.0..1.0);
-            let centre = Point3::new(
-                a as f64 + 0.9 * rng.gen_range(0.0..1.0),
-                0.2,
-                b as f64 + 0.9 * rng.gen_range(0.0..1.0),
-            );
-            if (centre - Point3::new(4.0, 0.2, 0.0)).length() > 0.9 {
-                let material: Arc<dyn Material> = if choose_mat < 0.8 {
-                    let albedo = coeff(random_colour(0, 1), random_colour(0, 1));
-                    Arc::new(Lambertian { albedo })
-                } else if choose_mat < 0.95 {
-                    let albedo = random_colour(0.5, 1.0);
-                    let fuzz = rng.gen_range(0.0..0.5);
-                    Arc::new(Metal { albedo, fuzz })
-                } else {
-                    Arc::clone(&material_glass)
-                };
-                world.push(Sphere::new(centre, 0.2, &material));
+            if rng.gen_range(0.0..1.0) <= sparsity {
+                let choose_mat = rng.gen_range(0.0..1.0);
+                let centre = Point3::new(
+                    a as f64 + 0.9 * rng.gen_range(0.0..1.0),
+                    0.2,
+                    b as f64 + 0.9 * rng.gen_range(0.0..1.0),
+                );
+                if (centre - Point3::new(4.0, 0.2, 0.0)).length() > 0.9 {
+                    let material: Arc<dyn Material> = if choose_mat < 0.4 {
+                        let albedo = coeff(random_colour(0, 1), random_colour(0, 1));
+                        Arc::new(Lambertian { albedo })
+                    } else if choose_mat < 0.7 {
+                        let albedo = random_colour(0.5, 1.0);
+                        let fuzz = rng.gen_range(0.0..0.5);
+                        Arc::new(Metal { albedo, fuzz })
+                    } else if choose_mat < 0.85 {
+                        Arc::clone(&material_glass)
+                    } else if choose_mat < 0.95 {
+                        let colour = random_colour(0.0, 1.0);
+                        Arc::new(LuminescentMetal::with_colour(colour, 0.0, 0.6))
+                    } else {
+                        Arc::clone(&material_bright)
+                    };
+                    world.push(Sphere::new(centre, 0.2, &material));
+                }
             }
         }
     }

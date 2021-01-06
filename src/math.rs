@@ -139,13 +139,6 @@ impl std::ops::Mul<Vec3> for f64 {
     }
 }
 
-//impl std::ops::Mul for Vec3 {
-//    type Output = f64;
-//    fn mul(self, other: Vec3) -> f64 {
-//        self.x * other.x + self.y * other.y + self.z * other.z
-//    }
-//}
-
 impl std::ops::MulAssign<f64> for Vec3 {
     fn mul_assign(&mut self, other: f64) {
         self.x *= other;
