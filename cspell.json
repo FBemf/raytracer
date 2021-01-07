@@ -13,6 +13,8 @@
         "structopt",
         "raytracer",
         "raytracing",
-        "coeff"
+        "coeff",
+        "bbox",
+        "consts"
     ]
 }

@@ -1,14 +1,29 @@
 use rand::Rng;
+use std::sync::Arc;
 
 use crate::hitting::{Colour, HitRecord, Material};
-use crate::math::{dot, random_in_unit_sphere, random_unit_vector, reflect, refract, Ray};
+use crate::math::{dot, random_in_unit_sphere, random_unit_vector, reflect, refract, Point3, Ray};
+use crate::textures::{SolidColour, Texture};
 
 pub struct Lambertian {
-    pub albedo: Colour,
+    pub albedo: Arc<dyn Texture>,
+}
+
+impl Lambertian {
+    pub fn with_colour(colour: Colour) -> Arc<dyn Material> {
+        Arc::new(Lambertian {
+            albedo: Arc::new(SolidColour { colour }),
+        })
+    }
+    pub fn with_texture(texture: Arc<dyn Texture>) -> Arc<dyn Material> {
+        Arc::new(Lambertian {
+            albedo: Arc::clone(&texture),
+        })
+    }
 }
 
 impl Material for Lambertian {
-    fn scatter(&self, _ray: &Ray, hit: &HitRecord) -> Option<(Ray, Colour)> {
+    fn scatter(&self, ray: &Ray, hit: &HitRecord) -> Option<(Ray, Colour)> {
         let scatter_direction = hit.normal + random_unit_vector();
         // catch degenerate scatter direction
         let scatter_direction = if scatter_direction.near_zero() {
@@ -19,8 +34,13 @@ impl Material for Lambertian {
         let scattered = Ray {
             origin: hit.intersection,
             direction: scatter_direction,
+            time: ray.time,
         };
-        Some((scattered, self.albedo))
+        Some((
+            scattered,
+            self.albedo
+                .value(hit.surface_u, hit.surface_v, hit.intersection),
+        ))
     }
 }
 
@@ -38,6 +58,7 @@ impl Material for Metal {
         let scattered = Ray {
             origin: hit.intersection,
             direction: reflected + self.fuzz * random_in_unit_sphere(),
+            time: ray.time,
         };
         if dot(scattered.direction, hit.normal) > 0.0 {
             Some((scattered, self.albedo))
@@ -76,6 +97,7 @@ impl Material for Dielectric {
             Ray {
                 origin: hit.intersection,
                 direction: direction,
+                time: ray.time,
             },
             Colour::new(1.0, 1.0, 1.0),
         ))
@@ -86,4 +108,17 @@ fn reflectance(cosine: f64, ref_idx: f64) -> f64 {
     let r0 = (1.1 - ref_idx) / (1.0 + ref_idx);
     let r0 = r0 * r0;
     r0 + (1.0 - r0) * (1.0 - cosine).powf(5.0)
+}
+
+pub struct DiffuseLight {
+    pub emit: Arc<dyn Texture>,
+}
+
+impl Material for DiffuseLight {
+    fn scatter(&self, _ray: &Ray, _hit: &HitRecord) -> Option<(Ray, Colour)> {
+        None
+    }
+    fn emitted(&self, u: f64, v: f64, p: Point3) -> Colour {
+        self.emit.value(u, v, p)
+    }
 }

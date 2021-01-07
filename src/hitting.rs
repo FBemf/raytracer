@@ -1,14 +1,15 @@
 use rand::Rng;
+use std::cmp::Ordering;
 use std::sync::Arc;
 
 use crate::math::{coeff, dot, Point3, Ray, Vec3};
 
 pub type Colour = Vec3;
 
-pub fn cast_ray<T: Hittable, H: Fn(&Ray) -> Colour>(
+pub fn cast_ray<T: Fn(&Ray) -> Colour>(
     ray: &Ray,
-    world: &T,
-    sky: H,
+    world: &Box<dyn Hittable>,
+    sky: T,
     bounces: u32,
 ) -> Colour {
     if bounces == 0 {
@@ -16,8 +17,13 @@ pub fn cast_ray<T: Hittable, H: Fn(&Ray) -> Colour>(
     }
     // min distance is 0.001, to prevent "shadow acne"
     if let Some(hit) = world.hit(ray, 0.001, f64::INFINITY) {
-        if let Some((ray, attenuation)) = hit.material.scatter(ray, &hit) {
-            coeff(attenuation, cast_ray(&ray, world, sky, bounces - 1))
+        let emitted = hit
+            .material
+            .emitted(hit.surface_u, hit.surface_v, hit.intersection);
+        if let Some((new_ray, attenuation)) = hit.material.scatter(ray, &hit) {
+            emitted + coeff(attenuation, cast_ray(&new_ray, world, sky, bounces - 1))
+        } else {
+            emitted
         }
     } else {
         sky(ray)
@@ -29,6 +35,8 @@ pub struct HitRecord {
     pub normal: Vec3,
     pub distance: f64,
     pub front_face: bool,
+    pub surface_u: f64,
+    pub surface_v: f64,
     pub material: Arc<dyn Material>,
 }
 
@@ -38,6 +46,7 @@ impl HitRecord {
         distance: f64,
         outward_normal: Vec3,
         material: Arc<dyn Material>,
+        uv: (f64, f64),
     ) -> Self {
         let front_face = dot(ray.direction, outward_normal) < 0.0;
         let normal = if front_face {
@@ -51,15 +60,16 @@ impl HitRecord {
             distance,
             front_face,
             material,
+            surface_u: uv.0,
+            surface_v: uv.1,
         }
     }
 }
 
-pub trait Hittable
-where
-    Self: Send + Sync,
-{
+pub trait Hittable: Send + Sync {
     fn hit(&self, ray: &Ray, min_dist: f64, max_dist: f64) -> Option<HitRecord>;
+    fn bounding_box(&self, time0: f64, time1: f64) -> Option<AABB>;
+    fn print(&self, indent: usize) -> String;
 }
 
 impl Hittable for Vec<Box<dyn Hittable>> {
@@ -79,22 +89,164 @@ impl Hittable for Vec<Box<dyn Hittable>> {
                 (None, None) => None,
             })
     }
-}
+    fn bounding_box(&self, time0: f64, time1: f64) -> Option<AABB> {
+        if self.len() == 0 {
+            return None;
+        }
+        let mut working_box = if let Some(b) = self[0].bounding_box(time0, time1) {
+            b
+        } else {
+            return None;
+        };
 
-pub trait Material
-where
-    Self: Send + Sync,
-{
-    fn scatter(&self, ray: &Ray, hit: &HitRecord) -> Option<(Ray, Colour)>;
-}
-
-pub fn random_colour<T: Into<f64>>(low: T, high: T) -> Colour {
-    let mut rng = rand::thread_rng();
-    let low: f64 = low.into();
-    let high: f64 = high.into();
-    Colour {
-        x: rng.gen_range(low..high),
-        y: rng.gen_range(low..high),
-        z: rng.gen_range(low..high),
+        for obj in self {
+            if let Some(new_box) = obj.bounding_box(time0, time1) {
+                working_box = surrounding_box(&new_box, &working_box);
+            } else {
+                return None;
+            }
+        }
+        Some(working_box)
     }
+    fn print(&self, indent: usize) -> String {
+        let start = format!(
+            "{}Vector: {}\n",
+            " ".repeat(indent),
+            self.bounding_box(0.0, 0.0).unwrap().print()
+        );
+        self.iter()
+            .fold(start, |acc, each| acc + &each.print(indent + 1))
+    }
+}
+
+pub trait Material: Send + Sync {
+    fn scatter(&self, ray: &Ray, hit: &HitRecord) -> Option<(Ray, Colour)>;
+    fn emitted(&self, _u: f64, _v: f64, _p: Point3) -> Colour {
+        Colour::new(0, 0, 0)
+    }
+}
+
+pub struct BVHNode {
+    left: Box<dyn Hittable>,
+    right: Box<dyn Hittable>,
+    bbox: AABB,
+}
+
+impl BVHNode {
+    pub fn from_vec(
+        mut objects: Vec<Box<dyn Hittable>>,
+        time0: f64,
+        time1: f64,
+    ) -> Box<dyn Hittable> {
+        let axis = rand::thread_rng().gen_range(0..3);
+        objects.sort_by(|a, b| bbox_compare(a, b, axis));
+        if objects.len() == 0 {
+            panic!("BVHNode cannot be created from empty slice");
+        } else if objects.len() == 1 {
+            objects.pop().unwrap()
+        } else {
+            let halfway = objects.len() / 2;
+            let right_objects = objects.split_off(halfway);
+            let left_objects = objects;
+            let left = Self::from_vec(left_objects, time0, time1);
+            let right = Self::from_vec(right_objects, time0, time1);
+            let left_bbox = left
+                .bounding_box(time0, time1)
+                .expect("BHVNode unable to find bbox of subtree");
+            let right_bbox = right
+                .bounding_box(time0, time1)
+                .expect("BHVNode unable to find bbox of subtree");
+
+            Box::new(BVHNode {
+                left,
+                right,
+                bbox: surrounding_box(&left_bbox, &right_bbox),
+            })
+        }
+    }
+}
+
+fn bbox_compare(a: &Box<dyn Hittable>, b: &Box<dyn Hittable>, axis: usize) -> Ordering {
+    a.bounding_box(0.0, 0.0)
+        .expect("Unable to find bbox to compare")
+        .minimum[axis]
+        .partial_cmp(
+            &b.bounding_box(0.0, 0.0)
+                .expect("Unable to find bbox to compare")
+                .minimum[axis],
+        )
+        .expect("Bounding boxes were incomparable")
+}
+
+impl Hittable for BVHNode {
+    fn hit(&self, ray: &Ray, min_dist: f64, max_dist: f64) -> Option<HitRecord> {
+        if !self.bbox.intersects(ray, min_dist, max_dist) {
+            None
+        } else {
+            if let Some(hit_left) = self.left.hit(ray, min_dist, max_dist) {
+                if let result_right @ Some(_) =
+                    self.right
+                        .hit(ray, min_dist, f64::min(hit_left.distance, max_dist))
+                {
+                    result_right
+                } else {
+                    Some(hit_left)
+                }
+            } else {
+                self.right.hit(ray, min_dist, max_dist)
+            }
+        }
+    }
+    fn bounding_box(&self, _time0: f64, _time1: f64) -> Option<AABB> {
+        Some(self.bbox)
+    }
+    fn print(&self, indent: usize) -> String {
+        let start = format!("{}Node: {}\n", " ".repeat(indent), self.bbox.print());
+        start + &self.left.print(indent + 1) + &self.right.print(indent + 1)
+    }
+}
+
+// Axis-aligned bounding box
+#[derive(Clone, Copy)]
+pub struct AABB {
+    pub minimum: Point3,
+    pub maximum: Point3,
+}
+
+impl AABB {
+    pub fn intersects(&self, ray: &Ray, mut min_dist: f64, mut max_dist: f64) -> bool {
+        for a in 0..3 {
+            let t0 = f64::min(
+                (self.minimum[a] - ray.origin[a]) / ray.direction[a],
+                (self.maximum[a] - ray.origin[a]) / ray.direction[a],
+            );
+            let t1 = f64::max(
+                (self.minimum[a] - ray.origin[a]) / ray.direction[a],
+                (self.maximum[a] - ray.origin[a]) / ray.direction[a],
+            );
+            min_dist = f64::max(t0, min_dist);
+            max_dist = f64::min(t1, max_dist);
+            if max_dist <= min_dist {
+                return false;
+            }
+        }
+        true
+    }
+    pub fn print(&self) -> String {
+        format!("{} {}", self.minimum, self.maximum)
+    }
+}
+
+pub fn surrounding_box(box0: &AABB, box1: &AABB) -> AABB {
+    let minimum = Point3 {
+        x: f64::min(box0.minimum.x, box1.minimum.x),
+        y: f64::min(box0.minimum.y, box1.minimum.y),
+        z: f64::min(box0.minimum.z, box1.minimum.z),
+    };
+    let maximum = Point3 {
+        x: f64::max(box0.maximum.x, box1.maximum.x),
+        y: f64::max(box0.maximum.y, box1.maximum.y),
+        z: f64::max(box0.maximum.z, box1.maximum.z),
+    };
+    AABB { minimum, maximum }
 }

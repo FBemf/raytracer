@@ -1,3 +1,5 @@
+use rand::Rng;
+
 use crate::math::{cross, random_in_unit_disc, Point3, Ray, Vec3};
 
 pub struct Camera {
@@ -9,6 +11,8 @@ pub struct Camera {
     v: Vec3,
     _w: Vec3,
     lens_radius: f64,
+    start_time: f64,
+    end_time: f64,
 }
 
 impl Camera {
@@ -20,6 +24,8 @@ impl Camera {
         aspect_ratio: f64,
         aperture: f64,
         focus_dist: f64,
+        start_time: f64,
+        end_time: f64,
     ) -> Camera {
         let theta = vertical_fov.into().to_radians();
         let viewport_height = 2.0 * (theta / 2.0).tan();
@@ -45,6 +51,8 @@ impl Camera {
             v,
             _w: w,
             lens_radius,
+            start_time,
+            end_time,
         }
     }
     pub fn find_ray(&self, s: f64, t: f64) -> Ray {
@@ -55,6 +63,7 @@ impl Camera {
             direction: self.lower_left_corner + s * self.horizontal + t * self.vertical
                 - self.origin
                 - offset,
+            time: rand::thread_rng().gen_range(self.start_time..=self.end_time),
         }
     }
 }

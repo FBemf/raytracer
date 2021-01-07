@@ -166,6 +166,18 @@ impl std::ops::DivAssign<f64> for Vec3 {
     }
 }
 
+impl std::ops::Index<usize> for Vec3 {
+    type Output = f64;
+    fn index(&self, i: usize) -> &Self::Output {
+        match i {
+            0 => &self.x,
+            1 => &self.y,
+            2 => &self.z,
+            x => panic!("index {} out of bounds on Vec3", x),
+        }
+    }
+}
+
 impl fmt::Display for Vec3 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "({}, {}, {})", self.x, self.y, self.z)
@@ -176,6 +188,7 @@ impl fmt::Display for Vec3 {
 pub struct Ray {
     pub origin: Point3,
     pub direction: Vec3,
+    pub time: f64,
 }
 
 impl Ray {
