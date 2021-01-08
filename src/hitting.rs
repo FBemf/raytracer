@@ -18,9 +18,7 @@ pub fn cast_ray<T: Fn(&Ray) -> Colour>(
     }
     // min distance is 0.001, to prevent "shadow acne"
     if let Some(hit) = world.hit(ray, 0.001, f64::INFINITY) {
-        let emitted = hit
-            .material
-            .emitted(hit.surface_u, hit.surface_v, hit.intersection);
+        let emitted = hit.material.emitted(&hit);
         if let Some((new_ray, attenuation)) = hit.material.scatter(ray, &hit) {
             emitted + coeff(attenuation, cast_ray(&new_ray, world, sky, bounces - 1))
         } else {
@@ -125,7 +123,7 @@ impl Hittable for Vec<Box<dyn Hittable>> {
 
 pub trait Material: Send + Sync {
     fn scatter(&self, ray: &Ray, hit: &HitRecord) -> Option<(Ray, Colour)>;
-    fn emitted(&self, _u: f64, _v: f64, _p: Point3) -> Colour {
+    fn emitted(&self, _hit: &HitRecord) -> Colour {
         Colour::new(0, 0, 0)
     }
 }

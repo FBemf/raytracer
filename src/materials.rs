@@ -123,7 +123,12 @@ impl Material for DiffuseLight {
     fn scatter(&self, _ray: &Ray, _hit: &HitRecord) -> Option<(Ray, Colour)> {
         None
     }
-    fn emitted(&self, u: f64, v: f64, p: Point3) -> Colour {
-        self.emit.value(u, v, p)
+    fn emitted(&self, hit: &HitRecord) -> Colour {
+        if hit.front_face {
+            self.emit
+                .value(hit.surface_u, hit.surface_v, hit.intersection)
+        } else {
+            Colour::new(0, 0, 0)
+        }
     }
 }

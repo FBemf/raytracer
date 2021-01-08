@@ -245,8 +245,9 @@ fn _cornell_box() -> (Camera, Box<dyn Hittable>, Sky, f64) {
     //let direction_up = Vec3::new(1, 0, -1);
     let field_of_view = 40;
     let aspect_ratio = 1.0;
-    let aperture = 0.1;
-    let distance_to_focus = 10.0;
+    //let aperture = 0.1;
+    let aperture = 0.0;
+    let distance_to_focus = 1000.0;
     let start_time = 0.0;
     let end_time = 1.0;
     let camera = Camera::new(
@@ -265,7 +266,10 @@ fn _cornell_box() -> (Camera, Box<dyn Hittable>, Sky, f64) {
     let red = Lambertian::with_colour(Colour::new(0.65, 0.05, 0.05));
     let white = Lambertian::with_colour(Colour::new(0.73, 0.73, 0.73));
     let green = Lambertian::with_colour(Colour::new(0.12, 0.45, 0.15));
-    let blue = Lambertian::with_colour(Colour::new(0.12, 0.15, 0.45));
+    let metal: Arc<dyn Material> = Arc::new(Metal {
+        albedo: Colour::new(0.8, 0.8, 0.8),
+        fuzz: 0.0,
+    });
     let light: Arc<dyn Material> = Arc::new(DiffuseLight {
         emit: Arc::new(SolidColour {
             colour: Colour::new(15, 15, 15),
@@ -276,11 +280,11 @@ fn _cornell_box() -> (Camera, Box<dyn Hittable>, Sky, f64) {
     });
 
     let block1: Arc<dyn Hittable> =
-        Block::new(Point3::new(-82, 0, -82), Point3::new(82, 330, 82), &glass).into();
+        Block::new(Point3::new(-82, 0, -82), Point3::new(82, 330, 82), &white).into();
     let block2: Arc<dyn Hittable> =
-        Block::new(Point3::new(-82, 0, -82), Point3::new(82, 164, 82), &glass).into();
+        Block::new(Point3::new(-90, 0, -90), Point3::new(90, 180, 90), &glass).into();
     let block3: Arc<dyn Hittable> =
-        Block::new(Point3::new(-82, 0, -82), Point3::new(82, 164, 82), &white).into();
+        Block::new(Point3::new(-90, 0, -90), Point3::new(90, 180, 90), &white).into();
 
     // World
     let world = vec![
@@ -291,22 +295,22 @@ fn _cornell_box() -> (Camera, Box<dyn Hittable>, Sky, f64) {
         XZRect::new(0, 555, 0, 555, 0, &white, true),
         XYRect::new(0, 555, 0, 555, 555, &white, false),
         //Translate::translate(
-        //    &RotateY::by_degrees(&block1, 15.0).into(),
-        //    Vec3::new(347, 0.1, 377),
+        //    &RotateY::by_degrees(&block1, -15.0).into(),
+        //    Vec3::new(150, 0.1, 360),
         //),
-        Sphere::new(Point3::new(180, 100, 150), 100.0, &glass),
-        Sphere::new(Point3::new(180, 100, 150), 80.0, &white),
+        Sphere::new(Point3::new(155, 100, 220), 100.0, &glass),
+        Sphere::new(Point3::new(155, 100, 220), 85.0, &white),
         Translate::translate(
-            &RotateY::by_degrees(&block2, 18.0).into(),
-            Vec3::new(347, 0.1, 377),
+            &RotateY::by_degrees(&block2, -31.0).into(),
+            Vec3::new(377, 0.1, 377),
         ),
         Translate::translate(
-            &RotateY::by_degrees(&block3, 80.0).into(),
-            Vec3::new(347, 165.2, 377),
+            &RotateY::by_degrees(&block3, -68.0).into(),
+            Vec3::new(377, 180.2, 377),
         ),
     ];
-    //let world: Box<dyn Hittable> = Box::new(world);
-    let world = BVHNode::from_vec(world, start_time, end_time);
+    //let world = BVHNode::from_vec(world, start_time, end_time);
+    let world = Box::new(world);
 
     (
         camera,
