@@ -1,4 +1,5 @@
 use rand::Rng;
+use std::f64::consts::PI;
 use std::fmt;
 
 pub type Point3 = Vec3;
@@ -11,7 +12,12 @@ pub struct Vec3 {
 }
 
 impl Vec3 {
-    pub fn new<T: Into<f64>>(x: T, y: T, z: T) -> Vec3 {
+    pub fn new<T, U, V>(x: T, y: U, z: V) -> Vec3
+    where
+        T: Into<f64>,
+        U: Into<f64>,
+        V: Into<f64>,
+    {
         Vec3 {
             x: x.into(),
             y: y.into(),
@@ -178,6 +184,17 @@ impl std::ops::Index<usize> for Vec3 {
     }
 }
 
+impl std::ops::IndexMut<usize> for Vec3 {
+    fn index_mut(&mut self, i: usize) -> &mut Self::Output {
+        match i {
+            0 => &mut self.x,
+            1 => &mut self.y,
+            2 => &mut self.z,
+            x => panic!("index {} out of bounds on Vec3", x),
+        }
+    }
+}
+
 impl fmt::Display for Vec3 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "({}, {}, {})", self.x, self.y, self.z)
@@ -215,9 +232,9 @@ pub fn random_in_unit_sphere() -> Vec3 {
     let mut rng = rand::thread_rng();
     loop {
         let p = Vec3::new(
-            rng.gen_range(0.0..1.0),
-            rng.gen_range(0.0..1.0),
-            rng.gen_range(0.0..1.0),
+            rng.gen_range(-1.0..1.0),
+            rng.gen_range(-1.0..1.0),
+            rng.gen_range(-1.0..1.0),
         );
         if p.length_squared() <= 1.0 {
             return p;
@@ -228,11 +245,49 @@ pub fn random_in_unit_sphere() -> Vec3 {
 pub fn random_in_unit_disc() -> Vec3 {
     let mut rng = rand::thread_rng();
     loop {
-        let p = Vec3::new(rng.gen_range(0.0..1.0), rng.gen_range(0.0..1.0), 0.0);
+        let p = Vec3::new(rng.gen_range(-1.0..1.0), rng.gen_range(-1.0..1.0), 0.0);
         if p.length_squared() <= 1.0 {
             return p;
         }
     }
+}
+
+pub fn distance_to_sphere(
+    ray: &Ray,
+    centre: Point3,
+    radius: f64,
+    min_dist: f64,
+    max_dist: f64,
+) -> Option<f64> {
+    let oc = ray.origin - centre;
+    let a = ray.direction.length_squared();
+    let half_b = dot(oc, ray.direction);
+    let c = oc.length_squared() - radius * radius;
+    let discriminant = half_b * half_b - a * c;
+
+    if discriminant < 0.0 {
+        return None;
+    }
+
+    let sqrt_d = discriminant.sqrt();
+    let mut root_distance = (-half_b - sqrt_d) / a;
+
+    // find nearest root within
+    if root_distance < min_dist || root_distance > max_dist {
+        root_distance = (-half_b + sqrt_d) / a;
+        if root_distance < min_dist || root_distance > max_dist {
+            return None;
+        }
+    }
+    Some(root_distance)
+}
+
+pub fn get_sphere_uv(p: Point3) -> (f64, f64) {
+    let theta = (-p.y).acos();
+    let phi = (-p.z).atan2(p.x) + PI;
+    let u = phi / (2.0 * PI);
+    let v = theta / PI;
+    (u, v)
 }
 
 #[test]

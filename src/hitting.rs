@@ -1,5 +1,6 @@
 use rand::Rng;
 use std::cmp::Ordering;
+use std::fmt;
 use std::sync::Arc;
 
 use crate::math::{coeff, dot, Point3, Ray, Vec3};
@@ -40,6 +41,19 @@ pub struct HitRecord {
     pub material: Arc<dyn Material>,
 }
 
+impl fmt::Debug for HitRecord {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("HitRecord")
+            .field("intersection", &self.intersection)
+            .field("normal", &self.normal)
+            .field("distance", &self.distance)
+            .field("front_face", &self.front_face)
+            .field("surface_u", &self.surface_u)
+            .field("surface_v", &self.surface_v)
+            .finish()
+    }
+}
+
 impl HitRecord {
     pub fn new(
         ray: &Ray,
@@ -69,7 +83,6 @@ impl HitRecord {
 pub trait Hittable: Send + Sync {
     fn hit(&self, ray: &Ray, min_dist: f64, max_dist: f64) -> Option<HitRecord>;
     fn bounding_box(&self, time0: f64, time1: f64) -> Option<AABB>;
-    fn print(&self, indent: usize) -> String;
 }
 
 impl Hittable for Vec<Box<dyn Hittable>> {
@@ -107,15 +120,6 @@ impl Hittable for Vec<Box<dyn Hittable>> {
             }
         }
         Some(working_box)
-    }
-    fn print(&self, indent: usize) -> String {
-        let start = format!(
-            "{}Vector: {}\n",
-            " ".repeat(indent),
-            self.bounding_box(0.0, 0.0).unwrap().print()
-        );
-        self.iter()
-            .fold(start, |acc, each| acc + &each.print(indent + 1))
     }
 }
 
@@ -200,10 +204,6 @@ impl Hittable for BVHNode {
     fn bounding_box(&self, _time0: f64, _time1: f64) -> Option<AABB> {
         Some(self.bbox)
     }
-    fn print(&self, indent: usize) -> String {
-        let start = format!("{}Node: {}\n", " ".repeat(indent), self.bbox.print());
-        start + &self.left.print(indent + 1) + &self.right.print(indent + 1)
-    }
 }
 
 // Axis-aligned bounding box
@@ -231,9 +231,6 @@ impl AABB {
             }
         }
         true
-    }
-    pub fn print(&self) -> String {
-        format!("{} {}", self.minimum, self.maximum)
     }
 }
 

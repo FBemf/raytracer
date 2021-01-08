@@ -2,6 +2,9 @@ use rand::Rng;
 
 use crate::math::{cross, random_in_unit_disc, Point3, Ray, Vec3};
 
+pub const TIME_MIN: f64 = 0.0;
+pub const TIME_MAX: f64 = 1.0;
+
 pub struct Camera {
     origin: Point3,
     lower_left_corner: Point3,
@@ -27,6 +30,9 @@ impl Camera {
         start_time: f64,
         end_time: f64,
     ) -> Camera {
+        if start_time < TIME_MIN || end_time > TIME_MAX || start_time > end_time {
+            panic!("Camera must have 0 <= start_time <= end_time <= 1");
+        }
         let theta = vertical_fov.into().to_radians();
         let viewport_height = 2.0 * (theta / 2.0).tan();
         let viewport_width = aspect_ratio * viewport_height;

@@ -21,8 +21,8 @@ mod textures;
 use camera::Camera;
 use hitting::{cast_ray, BVHNode, Colour, Hittable, Material};
 use materials::{Dielectric, DiffuseLight, Lambertian, Metal};
-use math::{clamp, coeff, Point3, Ray, Vec3};
-use objects::{MovingSphere, Sphere, XYRect, XZRect, YZRect};
+use math::{clamp, coeff, dot, Point3, Ray, Vec3};
+use objects::{Block, MovingSphere, RotateY, Sphere, Translate, XYRect, XZRect, YZRect};
 use progress::{Progress, TimedProgressBar};
 use textures::{Checkered, SolidColour};
 
@@ -50,8 +50,8 @@ fn main() -> Result<()> {
     let mut info = io::stderr();
 
     // Camera & World
-    let (camera, world, sky, aspect_ratio) = cornell_box();
-    //let (camera, world, sky, aspect_ratio) = random_scene();
+    let (camera, world, sky, aspect_ratio) = _cornell_box();
+    //let (camera, world, sky, aspect_ratio) = _random_scene();
 
     // Image
     let image_width = opt.width;
@@ -128,12 +128,6 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn light_background(ray: &Ray) -> Colour {
-    let unit_direction = ray.direction.unit_vector();
-    let t = 0.5 * (unit_direction.y + 1.0);
-    1.0 * ((1.0 - t) * Colour::new(1, 1, 1) + t * Colour::new(0.5, 0.7, 1.0))
-}
-
 fn colour_to_raw(c: Colour) -> Vec<u8> {
     let r = (255.0 * clamp(c.x.abs(), 0.0, 0.999)).floor() as u8;
     let g = (255.0 * clamp(c.y.abs(), 0.0, 0.999)).floor() as u8;
@@ -141,7 +135,7 @@ fn colour_to_raw(c: Colour) -> Vec<u8> {
     vec![r, g, b]
 }
 
-fn random_scene() -> (Camera, Box<dyn Hittable>, Sky, f64) {
+fn _random_scene() -> (Camera, Box<dyn Hittable>, Sky, f64) {
     //Camera
     let look_from = Point3::new(13, 2, 3);
     let look_at = Point3::new(0, 0, 0);
@@ -196,13 +190,10 @@ fn random_scene() -> (Camera, Box<dyn Hittable>, Sky, f64) {
         1000.0,
         &material_ground,
     ));
-    world.push(Sphere::new(Point3::new(0, 1, 1), 1.0, &material_glass));
-    world.push(Sphere::new(Point3::new(-4, 1, 1), 1.0, &material_matte));
-    //world.push(Sphere::new(Point3::new(4, 8, 3), 2.0, &material_light));
-    //world.push(XZRect::new(4, 6, 3, 5, 8, &material_light));
-    world.push(XYRect::new(1, 2, 1, 2, 3, &material_light));
-    world.push(XYRect::new(1, 3, 1, 3, -2, &material_light));
-    world.push(Sphere::new(Point3::new(4, 1, 1), 1.0, &material_metal));
+    world.push(Sphere::new(Point3::new(0, 1, 0), 1.0, &material_glass));
+    world.push(Sphere::new(Point3::new(-4, 1, 0), 1.0, &material_matte));
+    world.push(Sphere::new(Point3::new(4, 8, 3), 2.0, &material_light));
+    world.push(Sphere::new(Point3::new(4, 1, 0), 1.0, &material_metal));
 
     let mut rng = rand::thread_rng();
     let sparsity = 1.0;
@@ -218,13 +209,13 @@ fn random_scene() -> (Camera, Box<dyn Hittable>, Sky, f64) {
                 );
                 if (centre - Point3::new(4.0, 0.2, 0.0)).length() > 0.9 {
                     if choose_mat < 0.6 {
-                        let albedo = coeff(random_colour(0, 1), random_colour(0, 1));
+                        let albedo = coeff(_random_colour(0, 1), _random_colour(0, 1));
                         //let centre2 = centre + Vec3::new(0.0, rng.gen_range(0.0..0.5), 0.0);
                         let material: Arc<dyn Material> = Lambertian::with_colour(albedo);
                         //world.push(MovingSphere::new(centre, centre2, 0.0, 1.0, 0.2, &material));
                         world.push(Sphere::new(centre, 0.2, &material));
                     } else if choose_mat < 0.9 {
-                        let albedo = random_colour(0.5, 1.0);
+                        let albedo = _random_colour(0.5, 1.0);
                         let fuzz = rng.gen_range(0.0..0.5);
                         let material: Arc<dyn Material> = Arc::new(Metal { albedo, fuzz });
                         world.push(Sphere::new(centre, 0.2, &material));
@@ -246,7 +237,7 @@ fn random_scene() -> (Camera, Box<dyn Hittable>, Sky, f64) {
     )
 }
 
-fn cornell_box() -> (Camera, Box<dyn Hittable>, Sky, f64) {
+fn _cornell_box() -> (Camera, Box<dyn Hittable>, Sky, f64) {
     //Camera
     let look_from = Point3::new(278, 278, -800);
     let look_at = Point3::new(278, 278, 0);
@@ -274,42 +265,58 @@ fn cornell_box() -> (Camera, Box<dyn Hittable>, Sky, f64) {
     let red = Lambertian::with_colour(Colour::new(0.65, 0.05, 0.05));
     let white = Lambertian::with_colour(Colour::new(0.73, 0.73, 0.73));
     let green = Lambertian::with_colour(Colour::new(0.12, 0.45, 0.15));
+    let blue = Lambertian::with_colour(Colour::new(0.12, 0.15, 0.45));
     let light: Arc<dyn Material> = Arc::new(DiffuseLight {
         emit: Arc::new(SolidColour {
             colour: Colour::new(15, 15, 15),
         }),
     });
+    let glass: Arc<dyn Material> = Arc::new(Dielectric {
+        index_of_refraction: 1.5,
+    });
+
+    let block1: Arc<dyn Hittable> =
+        Block::new(Point3::new(-82, 0, -82), Point3::new(82, 330, 82), &glass).into();
+    let block2: Arc<dyn Hittable> =
+        Block::new(Point3::new(-82, 0, -82), Point3::new(82, 164, 82), &glass).into();
+    let block3: Arc<dyn Hittable> =
+        Block::new(Point3::new(-82, 0, -82), Point3::new(82, 164, 82), &white).into();
 
     // World
     let world = vec![
-        YZRect::new(0, 555, 0, 555, 555, &green),
-        YZRect::new(0, 555, 0, 555, 555, &light), // this light can illuminate the room
-        YZRect::new(0, 555, 0, 555, 0, &light),   // but this one can't
-        //YZRect::new(0, 555, 0, 555, 0, &green),
-        //Sphere::new(Point3::new(200, 200, 200), 30.0, &light),
-        //Sphere::new(Point3::new(100, 100, 100), 50.0, &green),
-        XZRect::new(0, 555, 0, 555, 0, &white),
-        XZRect::new(0, 555, 0, 555, 555, &white),
-        XYRect::new(0, 555, 0, 555, 555, &white),
+        YZRect::new(0, 555, 0, 555, 555, &green, false),
+        YZRect::new(0, 555, 0, 555, 0, &red, true),
+        XZRect::new(213, 343, 227, 332, 554, &light, false),
+        XZRect::new(0, 555, 0, 555, 555, &white, true),
+        XZRect::new(0, 555, 0, 555, 0, &white, true),
+        XYRect::new(0, 555, 0, 555, 555, &white, false),
+        //Translate::translate(
+        //    &RotateY::by_degrees(&block1, 15.0).into(),
+        //    Vec3::new(347, 0.1, 377),
+        //),
+        Sphere::new(Point3::new(180, 100, 150), 100.0, &glass),
+        Sphere::new(Point3::new(180, 100, 150), 80.0, &white),
+        Translate::translate(
+            &RotateY::by_degrees(&block2, 18.0).into(),
+            Vec3::new(347, 0.1, 377),
+        ),
+        Translate::translate(
+            &RotateY::by_degrees(&block3, 80.0).into(),
+            Vec3::new(347, 165.2, 377),
+        ),
     ];
     //let world: Box<dyn Hittable> = Box::new(world);
     let world = BVHNode::from_vec(world, start_time, end_time);
 
-    //(
-    //    camera,
-    //    world,
-    //    Box::new(|_| Colour::new(0, 0, 0)),
-    //    aspect_ratio,
-    //)
     (
         camera,
         world,
-        Box::new(|_| Colour::new(1, 1, 1)),
+        Box::new(|_| Colour::new(0, 0, 0)),
         aspect_ratio,
     )
 }
 
-fn random_colour<T: Into<f64>>(low: T, high: T) -> Colour {
+fn _random_colour<T: Into<f64>>(low: T, high: T) -> Colour {
     let mut rng = rand::thread_rng();
     let low: f64 = low.into();
     let high: f64 = high.into();
@@ -318,4 +325,11 @@ fn random_colour<T: Into<f64>>(low: T, high: T) -> Colour {
         y: rng.gen_range(low..=high),
         z: rng.gen_range(low..=high),
     }
+}
+
+fn _gradient_background(ray: &Ray, dir: Vec3, col1: Colour, col2: Colour) -> Colour {
+    // col1 used to be 1,1,1, col2 used to be 0.5,0.7,1.0
+    let gradient_pos = dot(dir, ray.direction.unit_vector());
+    let t = 0.5 * (gradient_pos + 1.0);
+    1.0 * ((1.0 - t) * col1 + t * col2)
 }

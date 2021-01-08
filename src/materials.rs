@@ -51,9 +51,6 @@ pub struct Metal {
 
 impl Material for Metal {
     fn scatter(&self, ray: &Ray, hit: &HitRecord) -> Option<(Ray, Colour)> {
-        if (ray.origin - hit.intersection).near_zero() {
-            dbg!("immediate bounce");
-        }
         let reflected = reflect(&ray.direction.unit_vector(), &hit.normal);
         let scattered = Ray {
             origin: hit.intersection,
@@ -112,6 +109,14 @@ fn reflectance(cosine: f64, ref_idx: f64) -> f64 {
 
 pub struct DiffuseLight {
     pub emit: Arc<dyn Texture>,
+}
+
+impl DiffuseLight {
+    pub fn with_colour(colour: Colour) -> Arc<dyn Material> {
+        Arc::new(DiffuseLight {
+            emit: Arc::new(SolidColour { colour }),
+        })
+    }
 }
 
 impl Material for DiffuseLight {

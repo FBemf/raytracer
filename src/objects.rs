@@ -1,13 +1,13 @@
-use std::f64::consts::PI;
 use std::sync::Arc;
 
+use crate::camera::{TIME_MAX, TIME_MIN};
 use crate::hitting::{surrounding_box, HitRecord, Hittable, Material, AABB};
-use crate::math::{dot, Point3, Ray, Vec3};
+use crate::math::{distance_to_sphere, get_sphere_uv, Point3, Ray, Vec3};
 
 pub struct Sphere {
-    pub centre: Point3,
-    pub radius: f64,
-    pub material: Arc<dyn Material>,
+    centre: Point3,
+    radius: f64,
+    material: Arc<dyn Material>,
 }
 
 impl Sphere {
@@ -44,24 +44,15 @@ impl Hittable for Sphere {
             maximum: self.centre + Vec3::new(self.radius, self.radius, self.radius),
         })
     }
-    fn print(&self, indent: usize) -> String {
-        format!(
-            "{}Sphere with centre {} and radius {}. bbox {}\n",
-            " ".repeat(indent),
-            self.centre,
-            self.radius,
-            self.bounding_box(0.0, 0.0).unwrap().print()
-        )
-    }
 }
 
 pub struct MovingSphere {
-    pub centre0: Point3,
-    pub centre1: Point3,
-    pub time0: f64,
-    pub time1: f64,
-    pub radius: f64,
-    pub material: Arc<dyn Material>,
+    centre0: Point3,
+    centre1: Point3,
+    time0: f64,
+    time1: f64,
+    radius: f64,
+    material: Arc<dyn Material>,
 }
 
 impl MovingSphere {
@@ -118,54 +109,58 @@ impl Hittable for MovingSphere {
         };
         Some(surrounding_box(&box0, &box1))
     }
-    fn print(&self, indent: usize) -> String {
-        format!(
-            "{}Moving Sphere with centre0 {}, centre1 {}, and radius {}. bbox {}\n",
-            " ".repeat(indent),
-            self.centre0,
-            self.centre1,
-            self.radius,
-            self.bounding_box(self.time0, self.time1).unwrap().print(),
-        )
+}
+
+pub struct Block {
+    minimum: Point3,
+    maximum: Point3,
+    sides: Vec<Box<dyn Hittable>>,
+}
+
+impl Block {
+    pub fn new(
+        minimum: Point3,
+        maximum: Point3,
+        material: &Arc<dyn Material>,
+    ) -> Box<dyn Hittable> {
+        let sides = vec![
+            XYRect::new(
+                minimum.x, maximum.x, minimum.y, maximum.y, minimum.z, material, true,
+            ),
+            XYRect::new(
+                minimum.x, maximum.x, minimum.y, maximum.y, maximum.z, material, false,
+            ),
+            XZRect::new(
+                minimum.x, maximum.x, minimum.z, maximum.z, minimum.y, material, true,
+            ),
+            XZRect::new(
+                minimum.x, maximum.x, minimum.z, maximum.z, maximum.y, material, false,
+            ),
+            YZRect::new(
+                minimum.y, maximum.y, minimum.z, maximum.z, minimum.x, material, true,
+            ),
+            YZRect::new(
+                minimum.y, maximum.y, minimum.z, maximum.z, maximum.x, material, false,
+            ),
+        ];
+        Box::new(Block {
+            minimum,
+            maximum,
+            sides,
+        })
     }
 }
 
-fn distance_to_sphere(
-    ray: &Ray,
-    centre: Point3,
-    radius: f64,
-    min_dist: f64,
-    max_dist: f64,
-) -> Option<f64> {
-    let oc = ray.origin - centre;
-    let a = ray.direction.length_squared();
-    let half_b = dot(oc, ray.direction);
-    let c = oc.length_squared() - radius * radius;
-    let discriminant = half_b * half_b - a * c;
-
-    if discriminant < 0.0 {
-        return None;
+impl Hittable for Block {
+    fn hit(&self, ray: &Ray, min_dist: f64, max_dist: f64) -> Option<HitRecord> {
+        self.sides.hit(ray, min_dist, max_dist)
     }
-
-    let sqrt_d = discriminant.sqrt();
-    let mut root_distance = (-half_b - sqrt_d) / a;
-
-    // find nearest root within
-    if root_distance < min_dist || root_distance > max_dist {
-        root_distance = (-half_b + sqrt_d) / a;
-        if root_distance < min_dist || root_distance > max_dist {
-            return None;
-        }
+    fn bounding_box(&self, _time0: f64, _time1: f64) -> Option<AABB> {
+        Some(AABB {
+            minimum: self.minimum,
+            maximum: self.maximum,
+        })
     }
-    Some(root_distance)
-}
-
-fn get_sphere_uv(p: Point3) -> (f64, f64) {
-    let theta = (-p.y).acos();
-    let phi = (-p.z).atan2(p.x) + PI;
-    let u = phi / (2.0 * PI);
-    let v = theta / PI;
-    (u, v)
 }
 
 pub struct XYRect {
@@ -175,6 +170,7 @@ pub struct XYRect {
     y1: f64,
     k: f64,
     material: Arc<dyn Material>,
+    facing_positive: bool,
 }
 
 impl XYRect {
@@ -185,6 +181,7 @@ impl XYRect {
         y1: T,
         k: T,
         material: &Arc<dyn Material>,
+        facing_positive: bool,
     ) -> Box<dyn Hittable> {
         Box::new(XYRect {
             x0: x0.into(),
@@ -193,6 +190,7 @@ impl XYRect {
             y1: y1.into(),
             k: k.into(),
             material: Arc::clone(material),
+            facing_positive,
         })
     }
 }
@@ -213,7 +211,7 @@ impl Hittable for XYRect {
         Some(HitRecord::new(
             ray,
             t,
-            Vec3::new(0, 0, 1),
+            Vec3::new(0, 0, if self.facing_positive { 1 } else { -1 }),
             Arc::clone(&self.material),
             (u, v),
         ))
@@ -224,12 +222,6 @@ impl Hittable for XYRect {
             maximum: Point3::new(self.x1, self.y1, self.k + 0.0001),
         })
     }
-    fn print(&self, _indent: usize) -> String {
-        format!(
-            "XYBox with x={}-{}, y={}-{}, z={}",
-            self.x0, self.x1, self.y0, self.y1, self.k
-        )
-    }
 }
 
 pub struct XZRect {
@@ -239,6 +231,7 @@ pub struct XZRect {
     z1: f64,
     k: f64,
     material: Arc<dyn Material>,
+    facing_positive: bool,
 }
 
 impl XZRect {
@@ -249,6 +242,7 @@ impl XZRect {
         z1: T,
         k: T,
         material: &Arc<dyn Material>,
+        facing_positive: bool,
     ) -> Box<dyn Hittable> {
         Box::new(XZRect {
             x0: x0.into(),
@@ -257,6 +251,7 @@ impl XZRect {
             z1: z1.into(),
             k: k.into(),
             material: Arc::clone(material),
+            facing_positive,
         })
     }
 }
@@ -277,7 +272,7 @@ impl Hittable for XZRect {
         Some(HitRecord::new(
             ray,
             t,
-            Vec3::new(0, 1, 0),
+            Vec3::new(0, if self.facing_positive { 1 } else { -1 }, 0),
             Arc::clone(&self.material),
             (u, v),
         ))
@@ -288,12 +283,6 @@ impl Hittable for XZRect {
             maximum: Point3::new(self.x1, self.k + 0.0001, self.z1),
         })
     }
-    fn print(&self, _indent: usize) -> String {
-        format!(
-            "XZBox with x={}-{}, y={}, z={}-{}",
-            self.x0, self.x1, self.k, self.z0, self.z1
-        )
-    }
 }
 
 pub struct YZRect {
@@ -303,6 +292,7 @@ pub struct YZRect {
     z1: f64,
     k: f64,
     material: Arc<dyn Material>,
+    facing_positive: bool,
 }
 
 impl YZRect {
@@ -313,6 +303,7 @@ impl YZRect {
         z1: T,
         k: T,
         material: &Arc<dyn Material>,
+        facing_positive: bool,
     ) -> Box<dyn Hittable> {
         Box::new(YZRect {
             y0: y0.into(),
@@ -321,6 +312,7 @@ impl YZRect {
             z1: z1.into(),
             k: k.into(),
             material: Arc::clone(material),
+            facing_positive,
         })
     }
 }
@@ -341,7 +333,7 @@ impl Hittable for YZRect {
         Some(HitRecord::new(
             ray,
             t,
-            Vec3::new(1, 0, 0),
+            Vec3::new(if self.facing_positive { 1 } else { -1 }, 0, 0),
             Arc::clone(&self.material),
             (u, v),
         ))
@@ -352,10 +344,143 @@ impl Hittable for YZRect {
             maximum: Point3::new(self.k + 0.0001, self.y1, self.z1),
         })
     }
-    fn print(&self, _indent: usize) -> String {
-        format!(
-            "XZBox with x={}, y={}-{}, z={}-{}",
-            self.k, self.y0, self.y1, self.z0, self.z1
-        )
+}
+
+pub struct Translate {
+    original: Arc<dyn Hittable>,
+    offset: Vec3,
+}
+
+impl Translate {
+    pub fn translate(target: &Arc<dyn Hittable>, offset: Vec3) -> Box<dyn Hittable> {
+        Box::new(Translate {
+            original: Arc::clone(target),
+            offset,
+        })
+    }
+}
+
+impl Hittable for Translate {
+    fn hit(&self, ray: &Ray, min_dist: f64, max_dist: f64) -> Option<HitRecord> {
+        let moved_ray = Ray {
+            origin: ray.origin - self.offset,
+            direction: ray.direction,
+            time: ray.time,
+        };
+        if let Some(hit) = self.original.hit(&moved_ray, min_dist, max_dist) {
+            Some(HitRecord {
+                distance: hit.distance,
+                intersection: hit.intersection + self.offset,
+                front_face: hit.front_face,
+                material: hit.material,
+                normal: hit.normal,
+                surface_u: hit.surface_u,
+                surface_v: hit.surface_v,
+            })
+        } else {
+            None
+        }
+    }
+    fn bounding_box(&self, time0: f64, time1: f64) -> Option<AABB> {
+        if let Some(bb) = self.original.bounding_box(time0, time1) {
+            Some(AABB {
+                minimum: bb.minimum + self.offset,
+                maximum: bb.maximum + self.offset,
+            })
+        } else {
+            None
+        }
+    }
+}
+
+pub struct RotateY {
+    original: Arc<dyn Hittable>,
+    sin_theta: f64,
+    cos_theta: f64,
+    bbox: Option<AABB>,
+}
+
+impl RotateY {
+    pub fn by_degrees(original: &Arc<dyn Hittable>, degrees: f64) -> Box<dyn Hittable> {
+        Self::by_radians(original, degrees.to_radians())
+    }
+    pub fn by_radians(original: &Arc<dyn Hittable>, radians: f64) -> Box<dyn Hittable> {
+        let sin_theta = radians.sin();
+        let cos_theta = radians.cos();
+        let bounding_box = if let Some(bbox) = original.bounding_box(TIME_MIN, TIME_MAX) {
+            let mut minimum = Point3::new(f64::INFINITY, f64::INFINITY, f64::INFINITY);
+            let mut maximum = Point3::new(f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
+            for i in 0..3 {
+                for j in 0..3 {
+                    for k in 0..3 {
+                        let x = i as f64 * bbox.maximum.x + (1.0 - i as f64) * bbox.minimum.x;
+                        let y = j as f64 * bbox.maximum.y + (1.0 - j as f64) * bbox.minimum.y;
+                        let z = k as f64 * bbox.maximum.z + (1.0 - k as f64) * bbox.minimum.z;
+
+                        let new_x = cos_theta * x + sin_theta * z;
+                        let new_z = -sin_theta * x + cos_theta * z;
+
+                        let tester = Vec3::new(new_x, y, new_z);
+
+                        for c in 0..3 {
+                            minimum[c] = f64::min(minimum[c], tester[c]);
+                            maximum[c] = f64::max(maximum[c], tester[c]);
+                        }
+                    }
+                }
+            }
+            Some(AABB { minimum, maximum })
+        } else {
+            None
+        };
+        Box::new(RotateY {
+            original: Arc::clone(original),
+            sin_theta,
+            cos_theta,
+            bbox: bounding_box,
+        })
+    }
+}
+
+impl Hittable for RotateY {
+    fn hit(&self, ray: &Ray, min_dist: f64, max_dist: f64) -> Option<HitRecord> {
+        let x = self.cos_theta * ray.origin.x - self.sin_theta * ray.origin.z;
+        let z = self.sin_theta * ray.origin.x + self.cos_theta * ray.origin.z;
+        let origin = Vec3::new(x, ray.origin.y, z);
+
+        let x = self.cos_theta * ray.direction.x - self.sin_theta * ray.direction.z;
+        let z = self.sin_theta * ray.direction.x + self.cos_theta * ray.direction.z;
+        let direction = Vec3::new(x, ray.direction.y, z);
+
+        let rotated = Ray {
+            origin,
+            direction,
+            time: ray.time,
+        };
+
+        if let Some(hit) = self.original.hit(&rotated, min_dist, max_dist) {
+            let x = self.cos_theta * hit.intersection.x + self.sin_theta * hit.intersection.z;
+            let z = -self.sin_theta * hit.intersection.x + self.cos_theta * hit.intersection.z;
+            let intersection = Point3::new(x, hit.intersection.y, z);
+
+            let x = self.cos_theta * hit.normal.x + self.sin_theta * hit.normal.z;
+            let z = -self.sin_theta * hit.normal.x + self.cos_theta * hit.normal.z;
+            let normal = Point3::new(x, hit.normal.y, z);
+
+            Some(HitRecord {
+                distance: hit.distance,
+                intersection,
+                front_face: hit.front_face,
+                material: hit.material,
+                normal,
+                surface_u: hit.surface_u,
+                surface_v: hit.surface_v,
+            })
+        } else {
+            None
+        }
+    }
+    fn bounding_box(&self, _time0: f64, _time1: f64) -> Option<AABB> {
+        self.bbox
     }
 }
