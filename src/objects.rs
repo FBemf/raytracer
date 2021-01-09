@@ -1,7 +1,9 @@
+use rand::Rng;
+
 use std::sync::Arc;
 
-use crate::camera::{TIME_MAX, TIME_MIN};
-use crate::hitting::{surrounding_box, HitRecord, Hittable, Material, AABB};
+use crate::hitting::{surrounding_box, Colour, HitRecord, Hittable, Material, AABB};
+use crate::materials::{DiffuseLight, Lambertian};
 use crate::math::{distance_to_sphere, get_sphere_uv, Point3, Ray, Vec3};
 
 pub struct Sphere {
@@ -346,141 +348,119 @@ impl Hittable for YZRect {
     }
 }
 
-pub struct Translate {
-    original: Arc<dyn Hittable>,
-    offset: Vec3,
+pub struct ConstantMedium {
+    boundary: Box<dyn Hittable>,
+    phase_function: Arc<dyn Material>,
+    neg_inv_density: f64,
 }
 
-impl Translate {
-    pub fn translate(target: &Arc<dyn Hittable>, offset: Vec3) -> Box<dyn Hittable> {
-        Box::new(Translate {
-            original: Arc::clone(target),
-            offset,
+impl ConstantMedium {
+    pub fn new(
+        boundary: Box<dyn Hittable>,
+        phase_function: &Arc<dyn Material>,
+        density: f64,
+    ) -> Box<dyn Hittable> {
+        Box::new(ConstantMedium {
+            boundary,
+            phase_function: Arc::clone(phase_function),
+            neg_inv_density: -1.0 / density,
         })
     }
 }
 
-impl Hittable for Translate {
+impl Hittable for ConstantMedium {
     fn hit(&self, ray: &Ray, min_dist: f64, max_dist: f64) -> Option<HitRecord> {
-        let moved_ray = Ray {
-            origin: ray.origin - self.offset,
-            direction: ray.direction,
-            time: ray.time,
-        };
-        if let Some(hit) = self.original.hit(&moved_ray, min_dist, max_dist) {
-            Some(HitRecord {
-                distance: hit.distance,
-                intersection: hit.intersection + self.offset,
-                front_face: hit.front_face,
-                material: hit.material,
-                normal: hit.normal,
-                surface_u: hit.surface_u,
-                surface_v: hit.surface_v,
-            })
+        if let Some(mut hit1) = self.boundary.hit(ray, f64::NEG_INFINITY, f64::INFINITY) {
+            if let Some(mut hit2) = self
+                .boundary
+                .hit(ray, hit1.distance + 0.0001, f64::INFINITY)
+            {
+                if hit1.distance < min_dist {
+                    hit1.distance = min_dist;
+                }
+                if hit2.distance > max_dist {
+                    hit2.distance = max_dist;
+                }
+                if hit1.distance >= hit2.distance {
+                    None
+                } else {
+                    if hit1.distance < 0.0 {
+                        hit1.distance = 0.0;
+                    }
+                    let ray_length = ray.direction.length();
+                    let distance_inside_boundary = (hit2.distance - hit1.distance) * ray_length;
+                    let hit_distance = self.neg_inv_density
+                        * rand::thread_rng().gen_range::<f64, _>(0.0..1.0).ln();
+                    if hit_distance > distance_inside_boundary {
+                        None
+                    } else {
+                        let distance = hit1.distance + hit_distance / ray_length;
+                        Some(HitRecord {
+                            distance,
+                            intersection: ray.at(distance),
+                            normal: Vec3::new(1, 0, 0), // arbitrary.
+                            front_face: true,           // also arbitrary.
+                            material: Arc::clone(&self.phase_function),
+                            surface_u: 0.0, // (u, v) is meaningless here
+                            surface_v: 0.0, //
+                        })
+                    }
+                }
+            } else {
+                None
+            }
         } else {
             None
         }
     }
     fn bounding_box(&self, time0: f64, time1: f64) -> Option<AABB> {
-        if let Some(bb) = self.original.bounding_box(time0, time1) {
-            Some(AABB {
-                minimum: bb.minimum + self.offset,
-                maximum: bb.maximum + self.offset,
-            })
-        } else {
-            None
-        }
+        self.boundary.bounding_box(time0, time1)
     }
 }
 
-pub struct RotateY {
-    original: Arc<dyn Hittable>,
-    sin_theta: f64,
-    cos_theta: f64,
-    bbox: Option<AABB>,
+pub struct Spotlight {
+    minimum: Point3,
+    maximum: Point3,
+    panes: Vec<Box<dyn Hittable>>,
 }
 
-impl RotateY {
-    pub fn by_degrees(original: &Arc<dyn Hittable>, degrees: f64) -> Box<dyn Hittable> {
-        Self::by_radians(original, degrees.to_radians())
-    }
-    pub fn by_radians(original: &Arc<dyn Hittable>, radians: f64) -> Box<dyn Hittable> {
-        let sin_theta = radians.sin();
-        let cos_theta = radians.cos();
-        let bounding_box = if let Some(bbox) = original.bounding_box(TIME_MIN, TIME_MAX) {
-            let mut minimum = Point3::new(f64::INFINITY, f64::INFINITY, f64::INFINITY);
-            let mut maximum = Point3::new(f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
-            for i in 0..3 {
-                for j in 0..3 {
-                    for k in 0..3 {
-                        let x = i as f64 * bbox.maximum.x + (1.0 - i as f64) * bbox.minimum.x;
-                        let y = j as f64 * bbox.maximum.y + (1.0 - j as f64) * bbox.minimum.y;
-                        let z = k as f64 * bbox.maximum.z + (1.0 - k as f64) * bbox.minimum.z;
-
-                        let new_x = cos_theta * x + sin_theta * z;
-                        let new_z = -sin_theta * x + cos_theta * z;
-
-                        let tester = Vec3::new(new_x, y, new_z);
-
-                        for c in 0..3 {
-                            minimum[c] = f64::min(minimum[c], tester[c]);
-                            maximum[c] = f64::max(maximum[c], tester[c]);
-                        }
-                    }
-                }
-            }
-            Some(AABB { minimum, maximum })
-        } else {
-            None
-        };
-        Box::new(RotateY {
-            original: Arc::clone(original),
-            sin_theta,
-            cos_theta,
-            bbox: bounding_box,
+impl Spotlight {
+    pub fn new(minimum: Point3, maximum: Point3, light: Colour) -> Box<dyn Hittable> {
+        let dark = Lambertian::with_colour(Colour::new(0, 0, 0));
+        let light = DiffuseLight::with_colour(light);
+        let panes = vec![
+            XYRect::new(
+                minimum.x, maximum.x, minimum.y, maximum.y, minimum.z, &dark, true,
+            ),
+            XYRect::new(
+                minimum.x, maximum.x, minimum.y, maximum.y, maximum.z, &dark, true,
+            ),
+            XZRect::new(
+                minimum.x, maximum.x, minimum.z, maximum.z, maximum.y, &light, false,
+            ),
+            YZRect::new(
+                minimum.y, maximum.y, minimum.z, maximum.z, minimum.x, &dark, true,
+            ),
+            YZRect::new(
+                minimum.y, maximum.y, minimum.z, maximum.z, maximum.x, &dark, false,
+            ),
+        ];
+        Box::new(Spotlight {
+            minimum,
+            maximum,
+            panes,
         })
     }
 }
 
-impl Hittable for RotateY {
+impl Hittable for Spotlight {
     fn hit(&self, ray: &Ray, min_dist: f64, max_dist: f64) -> Option<HitRecord> {
-        let x = self.cos_theta * ray.origin.x - self.sin_theta * ray.origin.z;
-        let z = self.sin_theta * ray.origin.x + self.cos_theta * ray.origin.z;
-        let origin = Vec3::new(x, ray.origin.y, z);
-
-        let x = self.cos_theta * ray.direction.x - self.sin_theta * ray.direction.z;
-        let z = self.sin_theta * ray.direction.x + self.cos_theta * ray.direction.z;
-        let direction = Vec3::new(x, ray.direction.y, z);
-
-        let rotated = Ray {
-            origin,
-            direction,
-            time: ray.time,
-        };
-
-        if let Some(hit) = self.original.hit(&rotated, min_dist, max_dist) {
-            let x = self.cos_theta * hit.intersection.x + self.sin_theta * hit.intersection.z;
-            let z = -self.sin_theta * hit.intersection.x + self.cos_theta * hit.intersection.z;
-            let intersection = Point3::new(x, hit.intersection.y, z);
-
-            let x = self.cos_theta * hit.normal.x + self.sin_theta * hit.normal.z;
-            let z = -self.sin_theta * hit.normal.x + self.cos_theta * hit.normal.z;
-            let normal = Point3::new(x, hit.normal.y, z);
-
-            Some(HitRecord {
-                distance: hit.distance,
-                intersection,
-                front_face: hit.front_face,
-                material: hit.material,
-                normal,
-                surface_u: hit.surface_u,
-                surface_v: hit.surface_v,
-            })
-        } else {
-            None
-        }
+        self.panes.hit(ray, min_dist, max_dist)
     }
     fn bounding_box(&self, _time0: f64, _time1: f64) -> Option<AABB> {
-        self.bbox
+        Some(AABB {
+            minimum: self.minimum,
+            maximum: self.maximum,
+        })
     }
 }

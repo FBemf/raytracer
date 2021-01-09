@@ -2,7 +2,7 @@ use rand::Rng;
 use std::sync::Arc;
 
 use crate::hitting::{Colour, HitRecord, Material};
-use crate::math::{dot, random_in_unit_sphere, random_unit_vector, reflect, refract, Point3, Ray};
+use crate::math::{dot, random_in_unit_sphere, random_unit_vector, reflect, refract, Ray};
 use crate::textures::{SolidColour, Texture};
 
 pub struct Lambertian {
@@ -15,9 +15,9 @@ impl Lambertian {
             albedo: Arc::new(SolidColour { colour }),
         })
     }
-    pub fn with_texture(texture: Arc<dyn Texture>) -> Arc<dyn Material> {
+    pub fn with_texture(texture: &Arc<dyn Texture>) -> Arc<dyn Material> {
         Arc::new(Lambertian {
-            albedo: Arc::clone(&texture),
+            albedo: Arc::clone(texture),
         })
     }
 }
@@ -130,5 +130,23 @@ impl Material for DiffuseLight {
         } else {
             Colour::new(0, 0, 0)
         }
+    }
+}
+
+pub struct Isotropic {
+    pub albedo: Arc<dyn Texture>,
+}
+
+impl Material for Isotropic {
+    fn scatter(&self, ray: &Ray, hit: &HitRecord) -> Option<(Ray, Colour)> {
+        Some((
+            Ray {
+                origin: hit.intersection,
+                direction: random_in_unit_sphere(),
+                time: ray.time,
+            },
+            self.albedo
+                .value(hit.surface_u, hit.surface_v, hit.intersection),
+        ))
     }
 }
