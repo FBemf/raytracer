@@ -349,19 +349,19 @@ impl Hittable for YZRect {
 }
 
 pub struct ConstantMedium {
-    boundary: Box<dyn Hittable>,
+    boundary: Arc<dyn Hittable>,
     phase_function: Arc<dyn Material>,
     neg_inv_density: f64,
 }
 
 impl ConstantMedium {
     pub fn new(
-        boundary: Box<dyn Hittable>,
+        boundary: &Arc<dyn Hittable>,
         phase_function: &Arc<dyn Material>,
         density: f64,
     ) -> Box<dyn Hittable> {
         Box::new(ConstantMedium {
-            boundary,
+            boundary: Arc::clone(boundary),
             phase_function: Arc::clone(phase_function),
             neg_inv_density: -1.0 / density,
         })

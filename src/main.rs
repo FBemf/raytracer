@@ -11,6 +11,7 @@ use std::time::Instant;
 use structopt::StructOpt;
 
 mod camera;
+mod config;
 mod hitting;
 mod materials;
 mod math;
@@ -394,18 +395,20 @@ fn _cornell_smoke() -> (Camera, Box<dyn Hittable>, Sky, f64) {
         XZRect::new(0, 555, 0, 555, 0, &white, true),
         XYRect::new(0, 555, 0, 555, 555, &white, false),
         ConstantMedium::new(
-            Translate::translate(
+            &Translate::translate(
                 &RotateY::by_degrees(&block1, 15.0).into(),
                 Vec3::new(265, 0, 295),
-            ),
+            )
+            .into(),
             &smoke,
             0.01,
         ),
         ConstantMedium::new(
-            Translate::translate(
+            &Translate::translate(
                 &RotateY::by_degrees(&block2, -18.0).into(),
                 Vec3::new(130, 0, 65),
-            ),
+            )
+            .into(),
             &mist,
             0.01,
         ),
@@ -523,11 +526,12 @@ fn _blocky_scene() -> (Camera, Box<dyn Hittable>, Sky, f64) {
     //world.push(XZRect::new(123, 423, 147, 412, 554, &light, false));
     world.push(Sphere::new(Point3::new(310, 200, 100), 100.0, &glass));
     world.push(ConstantMedium::new(
-        Block::new(
+        &Block::new(
             Point3::new(-2000, -2000, -2000),
             Point3::new(2000, 2000, 2000),
             &ground,
-        ),
+        )
+        .into(),
         &mist,
         0.0003,
     ));
