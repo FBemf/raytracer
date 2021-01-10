@@ -1,9 +1,12 @@
 use rand::Rng;
 
+use crate::hitting::Colour;
 use crate::math::{cross, random_in_unit_disc, Point3, Ray, Vec3};
 
 pub const TIME_MIN: f64 = 0.0;
 pub const TIME_MAX: f64 = 1.0;
+
+pub type Sky = Box<dyn Fn(&Ray) -> Colour + Send + Sync + 'static>;
 
 pub struct Camera {
     origin: Point3,

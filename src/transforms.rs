@@ -10,8 +10,8 @@ pub struct Translate {
 }
 
 impl Translate {
-    pub fn translate(target: &Arc<dyn Hittable>, offset: Vec3) -> Box<dyn Hittable> {
-        Box::new(Translate {
+    pub fn translate(target: &Arc<dyn Hittable>, offset: Vec3) -> Arc<dyn Hittable> {
+        Arc::new(Translate {
             original: Arc::clone(target),
             offset,
         })
@@ -59,10 +59,10 @@ pub struct RotateX {
 }
 
 impl RotateX {
-    pub fn by_degrees(original: &Arc<dyn Hittable>, degrees: f64) -> Box<dyn Hittable> {
+    pub fn by_degrees(original: &Arc<dyn Hittable>, degrees: f64) -> Arc<dyn Hittable> {
         Self::by_radians(original, degrees.to_radians())
     }
-    pub fn by_radians(original: &Arc<dyn Hittable>, radians: f64) -> Box<dyn Hittable> {
+    pub fn by_radians(original: &Arc<dyn Hittable>, radians: f64) -> Arc<dyn Hittable> {
         let sin_theta = radians.sin();
         let cos_theta = radians.cos();
         let bounding_box = if let Some(bbox) = original.bounding_box(TIME_MIN, TIME_MAX) {
@@ -91,7 +91,7 @@ impl RotateX {
         } else {
             None
         };
-        Box::new(RotateX {
+        Arc::new(RotateX {
             original: Arc::clone(original),
             sin_theta,
             cos_theta,
@@ -151,10 +151,10 @@ pub struct RotateY {
 }
 
 impl RotateY {
-    pub fn by_degrees(original: &Arc<dyn Hittable>, degrees: f64) -> Box<dyn Hittable> {
+    pub fn by_degrees(original: &Arc<dyn Hittable>, degrees: f64) -> Arc<dyn Hittable> {
         Self::by_radians(original, degrees.to_radians())
     }
-    pub fn by_radians(original: &Arc<dyn Hittable>, radians: f64) -> Box<dyn Hittable> {
+    pub fn by_radians(original: &Arc<dyn Hittable>, radians: f64) -> Arc<dyn Hittable> {
         let sin_theta = radians.sin();
         let cos_theta = radians.cos();
         let bounding_box = if let Some(bbox) = original.bounding_box(TIME_MIN, TIME_MAX) {
@@ -183,7 +183,7 @@ impl RotateY {
         } else {
             None
         };
-        Box::new(RotateY {
+        Arc::new(RotateY {
             original: Arc::clone(original),
             sin_theta,
             cos_theta,
@@ -243,10 +243,10 @@ pub struct RotateZ {
 }
 
 impl RotateZ {
-    pub fn by_degrees(original: &Arc<dyn Hittable>, degrees: f64) -> Box<dyn Hittable> {
+    pub fn by_degrees(original: &Arc<dyn Hittable>, degrees: f64) -> Arc<dyn Hittable> {
         Self::by_radians(original, degrees.to_radians())
     }
-    pub fn by_radians(original: &Arc<dyn Hittable>, radians: f64) -> Box<dyn Hittable> {
+    pub fn by_radians(original: &Arc<dyn Hittable>, radians: f64) -> Arc<dyn Hittable> {
         let sin_theta = radians.sin();
         let cos_theta = radians.cos();
         let bounding_box = if let Some(bbox) = original.bounding_box(TIME_MIN, TIME_MAX) {
@@ -275,7 +275,7 @@ impl RotateZ {
         } else {
             None
         };
-        Box::new(RotateZ {
+        Arc::new(RotateZ {
             original: Arc::clone(original),
             sin_theta,
             cos_theta,

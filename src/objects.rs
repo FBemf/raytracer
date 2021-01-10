@@ -4,7 +4,8 @@ use std::sync::Arc;
 
 use crate::hitting::{surrounding_box, Colour, HitRecord, Hittable, Material, AABB};
 use crate::materials::{DiffuseLight, Lambertian};
-use crate::math::{distance_to_sphere, get_sphere_uv, Point3, Ray, Vec3};
+use crate::math::{distance_to_sphere, dot, get_sphere_uv, Point3, Ray, Vec3};
+use crate::transforms::{RotateY, RotateZ, Translate};
 
 pub struct Sphere {
     centre: Point3,
@@ -13,8 +14,8 @@ pub struct Sphere {
 }
 
 impl Sphere {
-    pub fn new(centre: Point3, radius: f64, material: &Arc<dyn Material>) -> Box<dyn Hittable> {
-        Box::new(Sphere {
+    pub fn new(centre: Point3, radius: f64, material: &Arc<dyn Material>) -> Arc<dyn Hittable> {
+        Arc::new(Sphere {
             centre,
             radius,
             material: Arc::clone(material),
@@ -65,8 +66,8 @@ impl MovingSphere {
         time1: f64,
         radius: f64,
         material: &Arc<dyn Material>,
-    ) -> Box<dyn Hittable> {
-        Box::new(MovingSphere {
+    ) -> Arc<dyn Hittable> {
+        Arc::new(MovingSphere {
             centre0,
             centre1,
             time0,
@@ -116,7 +117,7 @@ impl Hittable for MovingSphere {
 pub struct Block {
     minimum: Point3,
     maximum: Point3,
-    sides: Vec<Box<dyn Hittable>>,
+    sides: Vec<Arc<dyn Hittable>>,
 }
 
 impl Block {
@@ -124,7 +125,7 @@ impl Block {
         minimum: Point3,
         maximum: Point3,
         material: &Arc<dyn Material>,
-    ) -> Box<dyn Hittable> {
+    ) -> Arc<dyn Hittable> {
         let sides = vec![
             XYRect::new(
                 minimum.x, maximum.x, minimum.y, maximum.y, minimum.z, material, true,
@@ -145,7 +146,7 @@ impl Block {
                 minimum.y, maximum.y, minimum.z, maximum.z, maximum.x, material, false,
             ),
         ];
-        Box::new(Block {
+        Arc::new(Block {
             minimum,
             maximum,
             sides,
@@ -184,8 +185,8 @@ impl XYRect {
         k: T,
         material: &Arc<dyn Material>,
         facing_positive: bool,
-    ) -> Box<dyn Hittable> {
-        Box::new(XYRect {
+    ) -> Arc<dyn Hittable> {
+        Arc::new(XYRect {
             x0: x0.into(),
             x1: x1.into(),
             y0: y0.into(),
@@ -245,8 +246,8 @@ impl XZRect {
         k: T,
         material: &Arc<dyn Material>,
         facing_positive: bool,
-    ) -> Box<dyn Hittable> {
-        Box::new(XZRect {
+    ) -> Arc<dyn Hittable> {
+        Arc::new(XZRect {
             x0: x0.into(),
             x1: x1.into(),
             z0: z0.into(),
@@ -306,8 +307,8 @@ impl YZRect {
         k: T,
         material: &Arc<dyn Material>,
         facing_positive: bool,
-    ) -> Box<dyn Hittable> {
-        Box::new(YZRect {
+    ) -> Arc<dyn Hittable> {
+        Arc::new(YZRect {
             y0: y0.into(),
             y1: y1.into(),
             z0: z0.into(),
@@ -359,8 +360,8 @@ impl ConstantMedium {
         boundary: &Arc<dyn Hittable>,
         phase_function: &Arc<dyn Material>,
         density: f64,
-    ) -> Box<dyn Hittable> {
-        Box::new(ConstantMedium {
+    ) -> Arc<dyn Hittable> {
+        Arc::new(ConstantMedium {
             boundary: Arc::clone(boundary),
             phase_function: Arc::clone(phase_function),
             neg_inv_density: -1.0 / density,
@@ -421,22 +422,23 @@ impl Hittable for ConstantMedium {
 pub struct Spotlight {
     minimum: Point3,
     maximum: Point3,
-    panes: Vec<Box<dyn Hittable>>,
+    panes: Vec<Arc<dyn Hittable>>,
 }
 
 impl Spotlight {
-    pub fn new(minimum: Point3, maximum: Point3, light: Colour) -> Box<dyn Hittable> {
-        let dark = Lambertian::with_colour(Colour::new(0, 0, 0));
+    pub fn new_primitive(minimum: Point3, maximum: Point3, light: Colour) -> Arc<dyn Hittable> {
+        //let dark = Lambertian::with_colour(Colour::new(0, 0, 0));
+        let dark = Lambertian::with_colour(Colour::new(0.3, 0.3, 0.3));
         let light = DiffuseLight::with_colour(light);
         let panes = vec![
             XYRect::new(
                 minimum.x, maximum.x, minimum.y, maximum.y, minimum.z, &dark, true,
             ),
             XYRect::new(
-                minimum.x, maximum.x, minimum.y, maximum.y, maximum.z, &dark, true,
+                minimum.x, maximum.x, minimum.y, maximum.y, maximum.z, &dark, false,
             ),
             XZRect::new(
-                minimum.x, maximum.x, minimum.z, maximum.z, maximum.y, &light, false,
+                minimum.x, maximum.x, minimum.z, maximum.z, minimum.y, &light, true,
             ),
             YZRect::new(
                 minimum.y, maximum.y, minimum.z, maximum.z, minimum.x, &dark, true,
@@ -445,11 +447,48 @@ impl Spotlight {
                 minimum.y, maximum.y, minimum.z, maximum.z, maximum.x, &dark, false,
             ),
         ];
-        Box::new(Spotlight {
+        Arc::new(Spotlight {
             minimum,
             maximum,
             panes,
         })
+    }
+    pub fn new(
+        looking_from: Point3,
+        looking_at: Point3,
+        length: f64,
+        width: f64,
+        light: Colour,
+    ) -> Arc<dyn Hittable> {
+        let spotlight = Spotlight::new_primitive(
+            Point3::new(-width / 2.0, -length, -width / 2.0),
+            Point3::new(width / 2.0, 0, width / 2.0),
+            light,
+        );
+        let direction = looking_at - looking_from;
+        let direction_x = Vec3::new(direction.x, 0, 0);
+        let direction_z = Vec3::new(0, 0, direction.z);
+        // theta1 is the amount to rotate around the z axis
+        let theta1 = if direction.length() != 0.0 {
+            -dot(Vec3::new(0, 1, 0), direction.unit_vector()).acos()
+        } else {
+            0.0
+        };
+        // theta2 is the amount to rotate around the y axis
+        let theta2 = if direction_x.x != 0.0 || direction_z.z != 0.0 {
+            dot(
+                Vec3::new(1, 0, 0),
+                (direction_x + direction_z).unit_vector(),
+            )
+            .acos()
+                * -direction_z.z.signum()
+        } else {
+            0.0
+        };
+        Translate::translate(
+            &RotateY::by_radians(&RotateZ::by_radians(&spotlight, theta1), theta2),
+            looking_from,
+        )
     }
 }
 

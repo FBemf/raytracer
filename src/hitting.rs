@@ -9,7 +9,7 @@ pub type Colour = Vec3;
 
 pub fn cast_ray<T: Fn(&Ray) -> Colour>(
     ray: &Ray,
-    world: &Box<dyn Hittable>,
+    world: &Arc<dyn Hittable>,
     sky: T,
     bounces: u32,
 ) -> Colour {
@@ -83,7 +83,7 @@ pub trait Hittable: Send + Sync {
     fn bounding_box(&self, time0: f64, time1: f64) -> Option<AABB>;
 }
 
-impl Hittable for Vec<Box<dyn Hittable>> {
+impl Hittable for Vec<Arc<dyn Hittable>> {
     fn hit(&self, ray: &Ray, min_dist: f64, max_dist: f64) -> Option<HitRecord> {
         self.iter()
             .map(|x| x.hit(ray, min_dist, max_dist))
@@ -129,17 +129,17 @@ pub trait Material: Send + Sync {
 }
 
 pub struct BVHNode {
-    left: Box<dyn Hittable>,
-    right: Box<dyn Hittable>,
+    left: Arc<dyn Hittable>,
+    right: Arc<dyn Hittable>,
     bbox: AABB,
 }
 
 impl BVHNode {
     pub fn from_vec(
-        mut objects: Vec<Box<dyn Hittable>>,
+        mut objects: Vec<Arc<dyn Hittable>>,
         time0: f64,
         time1: f64,
-    ) -> Box<dyn Hittable> {
+    ) -> Arc<dyn Hittable> {
         let axis = rand::thread_rng().gen_range(0..3);
         objects.sort_by(|a, b| bbox_compare(a, b, axis));
         if objects.len() == 0 {
@@ -159,7 +159,7 @@ impl BVHNode {
                 .bounding_box(time0, time1)
                 .expect("BHVNode unable to find bbox of subtree");
 
-            Box::new(BVHNode {
+            Arc::new(BVHNode {
                 left,
                 right,
                 bbox: surrounding_box(&left_bbox, &right_bbox),
@@ -168,7 +168,7 @@ impl BVHNode {
     }
 }
 
-fn bbox_compare(a: &Box<dyn Hittable>, b: &Box<dyn Hittable>, axis: usize) -> Ordering {
+fn bbox_compare(a: &Arc<dyn Hittable>, b: &Arc<dyn Hittable>, axis: usize) -> Ordering {
     a.bounding_box(0.0, 0.0)
         .expect("Unable to find bbox to compare")
         .minimum[axis]

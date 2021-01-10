@@ -20,14 +20,15 @@ mod progress;
 mod textures;
 mod transforms;
 
-use camera::Camera;
+use camera::{Camera, Sky};
+use config::load_config;
 use hitting::{cast_ray, BVHNode, Colour, Hittable, Material};
 use materials::{Dielectric, DiffuseLight, Isotropic, Lambertian, Metal};
 use math::{clamp, coeff, dot, Point3, Ray, Vec3};
-use objects::{Block, ConstantMedium, MovingSphere, Sphere, Spotlight, XYRect, XZRect, YZRect};
+use objects::{Block, ConstantMedium, Sphere, Spotlight, XYRect, XZRect, YZRect};
 use progress::{Progress, TimedProgressBar};
 use textures::{Checkered, ImageTexture, SolidColour, Texture};
-use transforms::{RotateX, RotateY, RotateZ, Translate};
+use transforms::{RotateX, RotateY, Translate};
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "raytracer", about = "Raytracing in a weekend!")]
@@ -43,8 +44,6 @@ struct Opt {
     ray_samples: u32,
 }
 
-type Sky = Box<dyn Fn(&Ray) -> Colour + Send + Sync + 'static>;
-
 fn main() -> Result<()> {
     // cli args
     let opt = Opt::from_args();
@@ -57,7 +56,8 @@ fn main() -> Result<()> {
     //let (camera, world, sky, aspect_ratio) = _cornell_box();
     //let (camera, world, sky, aspect_ratio) = _cornell_smoke();
     //let (camera, world, sky, aspect_ratio) = _globe();
-    let (camera, world, sky, aspect_ratio) = _blocky_scene();
+    //let (camera, world, sky, aspect_ratio) = _blocky_scene();
+    let (camera, world, sky, aspect_ratio) = load_config("cornell.json5")?;
 
     // Image
     let image_width = opt.width;
@@ -141,7 +141,7 @@ fn colour_to_raw(c: Colour) -> Vec<u8> {
     vec![r, g, b]
 }
 
-fn _random_scene() -> (Camera, Box<dyn Hittable>, Sky, f64) {
+fn _random_scene() -> (Camera, Arc<dyn Hittable>, Sky, f64) {
     //Camera
     let look_from = Point3::new(13, 2, 3);
     let look_at = Point3::new(0, 0, 0);
@@ -204,8 +204,7 @@ fn _random_scene() -> (Camera, Box<dyn Hittable>, Sky, f64) {
         &RotateX::by_degrees(
             &XYRect::new(-1, 1, -1, 1, 0, &material_light, false).into(),
             -10.0,
-        )
-        .into(),
+        ),
         Vec3::new(0, 3, 3.5),
     ));
     world.push(Sphere::new(Point3::new(4, 1, 0), 1.0, &material_metal));
@@ -252,7 +251,7 @@ fn _random_scene() -> (Camera, Box<dyn Hittable>, Sky, f64) {
     )
 }
 
-fn _cornell_box() -> (Camera, Box<dyn Hittable>, Sky, f64) {
+fn _cornell_box() -> (Camera, Arc<dyn Hittable>, Sky, f64) {
     //Camera
     let look_from = Point3::new(278, 278, -800);
     let look_at = Point3::new(278, 278, 0);
@@ -295,12 +294,9 @@ fn _cornell_box() -> (Camera, Box<dyn Hittable>, Sky, f64) {
         index_of_refraction: 1.5,
     });
 
-    let block1: Arc<dyn Hittable> =
-        Block::new(Point3::new(-82, 0, -82), Point3::new(82, 330, 82), &white).into();
-    let block2: Arc<dyn Hittable> =
-        Block::new(Point3::new(-90, 0, -90), Point3::new(90, 180, 90), &glass).into();
-    let block3: Arc<dyn Hittable> =
-        Block::new(Point3::new(-90, 0, -90), Point3::new(90, 180, 90), &white).into();
+    let block1 = Block::new(Point3::new(-82, 0, -82), Point3::new(82, 330, 82), &white);
+    let block2 = Block::new(Point3::new(-90, 0, -90), Point3::new(90, 180, 90), &glass);
+    let block3 = Block::new(Point3::new(-90, 0, -90), Point3::new(90, 180, 90), &white);
 
     // World
     let world = vec![
@@ -311,17 +307,17 @@ fn _cornell_box() -> (Camera, Box<dyn Hittable>, Sky, f64) {
         XZRect::new(0, 555, 0, 555, 0, &white, true),
         XYRect::new(0, 555, 0, 555, 555, &white, false),
         Translate::translate(
-            &RotateY::by_degrees(&block1, -15.0).into(),
+            &RotateY::by_degrees(&block1, -15.0),
             Vec3::new(377, 0.1, 377),
         ),
         Sphere::new(Point3::new(155, 100, 320), 100.0, &glass),
         Sphere::new(Point3::new(155, 100, 320), 85.0, &blue),
         Translate::translate(
-            &RotateY::by_degrees(&block2, -21.0).into(),
+            &RotateY::by_degrees(&block2, -21.0),
             Vec3::new(307, 0.1, 140),
         ),
         Translate::translate(
-            &RotateY::by_degrees(&block2, -78.0).into(),
+            &RotateY::by_degrees(&block2, -78.0),
             Vec3::new(307, 180.2, 140),
         ),
     ];
@@ -336,7 +332,7 @@ fn _cornell_box() -> (Camera, Box<dyn Hittable>, Sky, f64) {
     )
 }
 
-fn _cornell_smoke() -> (Camera, Box<dyn Hittable>, Sky, f64) {
+fn _cornell_smoke() -> (Camera, Arc<dyn Hittable>, Sky, f64) {
     //Camera
     let look_from = Point3::new(278, 278, -800);
     let look_at = Point3::new(278, 278, 0);
@@ -424,12 +420,12 @@ fn _cornell_smoke() -> (Camera, Box<dyn Hittable>, Sky, f64) {
     )
 }
 
-fn _globe() -> (Camera, Box<dyn Hittable>, Sky, f64) {
+fn _globe() -> (Camera, Arc<dyn Hittable>, Sky, f64) {
     //Camera
     let look_from = Point3::new(13, 2, 3);
     let look_at = Point3::new(0, 0, 0);
     let direction_up = Vec3::new(0, 1, 0);
-    let field_of_view = 40;
+    let field_of_view = 90;
     let aspect_ratio = 3.0 / 2.0;
     //let aperture = 0.1;
     let aperture = 0.0;
@@ -451,13 +447,32 @@ fn _globe() -> (Camera, Box<dyn Hittable>, Sky, f64) {
     let earth_texture = ImageTexture::from_file("za_warudo.jpg").unwrap();
     let earth_material = Lambertian::with_texture(&earth_texture);
     let globe = Sphere::new(Point3::new(0, 0, 0), 2.0, &earth_material);
+    let spotlight = Spotlight::new(
+        Point3::new(4, -4, 0),
+        Point3::new(0, 0, 0),
+        4.0,
+        2.0,
+        Colour::new(100, 100, 100),
+    );
+    //let spotlight = Spotlight::new_primitive(
+    //    Point3::new(-0.5, -0.5, -4),
+    //    Point3::new(0.5, 0.5, 4),
+    //    Colour::new(10, 10, 10),
+    //);
+    let world: Arc<dyn Hittable> = Arc::new(vec![globe, spotlight]);
+    //let world = globe;
 
-    let sky = _gradient_background(direction_up, Colour::new(1, 1, 1), Colour::new(0.7, 0.5, 1));
+    //let sky = _gradient_background(direction_up, Colour::new(1, 1, 1), Colour::new(0.7, 0.5, 1));
+    let sky = _gradient_background(
+        direction_up,
+        Colour::new(0.03, 0.03, 0.03),
+        Colour::new(0.2, 0.02, 0.02),
+    );
 
-    (camera, globe, sky, aspect_ratio)
+    (camera, world, sky, aspect_ratio)
 }
 
-fn _blocky_scene() -> (Camera, Box<dyn Hittable>, Sky, f64) {
+fn _blocky_scene() -> (Camera, Arc<dyn Hittable>, Sky, f64) {
     //Camera
     let look_from = Point3::new(478, 378, -600);
     let look_at = Point3::new(278, 178, 0);
@@ -513,31 +528,37 @@ fn _blocky_scene() -> (Camera, Box<dyn Hittable>, Sky, f64) {
 
     let mut world = vec![BVHNode::from_vec(world, start_time, end_time)];
 
-    let spotlight: Arc<dyn Hittable> = Spotlight::new(
-        Point3::new(-60, 200, -60),
-        Point3::new(60, 800, 60),
-        Colour::new(80, 80, 80),
-    )
-    .into();
-    //let spotlight = XZRect::new(-80, 80, -80, 80, 0, &light, false).into();
-    let spotlight = RotateZ::by_degrees(&spotlight, -65.0).into();
-    let spotlight = Translate::translate(&spotlight, Vec3::new(650, 330, 200));
-    world.push(spotlight);
+    //let spotlight: Arc<dyn Hittable> = Spotlight::new_primitive(
+    //    Point3::new(-60, 200, -60),
+    //    Point3::new(60, 800, 60),
+    //    Colour::new(80, 80, 80),
+    //)
+    //.into();
+    //let spotlight = RotateZ::by_degrees(&spotlight, 115.0).into(); // used to be -65 when the spotlight started facing down
+    //let spotlight = Translate::translate(&spotlight, Vec3::new(650, 330, 200));
+    //world.push(spotlight);
     //world.push(XZRect::new(123, 423, 147, 412, 554, &light, false));
-    world.push(Sphere::new(Point3::new(310, 200, 100), 100.0, &glass));
-    world.push(ConstantMedium::new(
-        &Block::new(
-            Point3::new(-2000, -2000, -2000),
-            Point3::new(2000, 2000, 2000),
-            &ground,
-        )
-        .into(),
-        &mist,
-        0.0003,
+    world.push(Spotlight::new(
+        Point3::new(650, 330, 200),
+        Point3::new(310, 150, 100),
+        600.0,
+        120.0,
+        Colour::new(80, 80, 80),
     ));
+    world.push(Sphere::new(Point3::new(310, 200, 100), 100.0, &glass));
+    //world.push(ConstantMedium::new(
+    //    &Block::new(
+    //        Point3::new(-2000, -2000, -2000),
+    //        Point3::new(2000, 2000, 2000),
+    //        &ground,
+    //    )
+    //    .into(),
+    //    &mist,
+    //    0.0003,
+    //));
 
     //let world = BVHNode::from_vec(world, start_time, end_time);
-    let world = Box::new(world);
+    let world = Arc::new(world);
     let sky: Sky = Box::new(|_| Colour::new(0, 0, 0));
 
     (camera, world, sky, aspect_ratio)

@@ -7,6 +7,7 @@ use std::fs::File;
 use std::io::Read;
 use std::sync::Arc;
 
+use crate::camera::{Camera, Sky};
 use crate::hitting::{BVHNode, Colour, Hittable, Material};
 use crate::materials;
 use crate::math::{Point3, Vec3};
@@ -14,7 +15,7 @@ use crate::objects;
 use crate::textures::{self, Texture};
 use crate::transforms;
 
-fn load_config(filename: &str) -> Result<()> {
+pub fn load_config(filename: &str) -> Result<(Camera, Arc<dyn Hittable>, Sky, f64)> {
     let mut config_string = String::new();
     File::open(filename)?.read_to_string(&mut config_string)?;
     let config = json5::from_str(&config_string)?;
@@ -25,12 +26,43 @@ fn load_config(filename: &str) -> Result<()> {
         .world
         .iter()
         .map(|s| {
-            let a = hittables.get(&s as &str).and_then(|&a| Some(Box::new(*a)));
-            //.ok_or(anyhow!("Object {} does not exist", s))
+            hittables
+                .get(&s as &str)
+                .and_then(|a| Some(Arc::clone(a)))
+                .ok_or(anyhow!("Object {} does not exist", s))
         })
-        .collect::<Result<Vec<Box<dyn Hittable>>>>()?;
+        .collect::<Result<Vec<Arc<dyn Hittable>>>>()?;
     let world = BVHNode::from_vec(world, 0.0, 1.0);
-    unimplemented!();
+    let camera = Camera::new(
+        Point3::new(
+            config.camera.look_from[0],
+            config.camera.look_from[1],
+            config.camera.look_from[2],
+        ),
+        Point3::new(
+            config.camera.look_at[0],
+            config.camera.look_at[1],
+            config.camera.look_at[2],
+        ),
+        Point3::new(
+            config.camera.direction_up[0],
+            config.camera.direction_up[1],
+            config.camera.direction_up[2],
+        ),
+        config.camera.vertical_fov,
+        config.camera.aspect_ratio,
+        config.camera.aperture,
+        config.camera.focus_dist,
+        config.camera.start_time,
+        config.camera.end_time,
+    );
+    let sky_colour = Colour::new(
+        config.background[0],
+        config.background[1],
+        config.background[2],
+    );
+    let sky: Sky = Box::new(move |_| sky_colour);
+    Ok((camera, world, sky, config.camera.aspect_ratio))
 }
 
 fn build_textures(master_config: &MasterConfig) -> Result<HashMap<&str, Arc<dyn Texture>>> {
@@ -40,41 +72,43 @@ fn build_textures(master_config: &MasterConfig) -> Result<HashMap<&str, Arc<dyn 
         .iter()
         .map(|(s, t)| (s as &str, t))
         .collect();
-    while texture_configs.len() != 0 {
+    'begin_search: while texture_configs.len() != 0 {
         for _ in 0..texture_configs.len() {
             let (name, texture) = texture_configs.pop_front().unwrap();
             match texture {
-                TextureConfig::SolidColour(config) => {
+                TextureConfig::SolidColour { colour } => {
                     texture_list.insert(
                         name,
                         Arc::new(textures::SolidColour {
-                            colour: Colour::new(
-                                config.colour[0],
-                                config.colour[1],
-                                config.colour[2],
-                            ),
+                            colour: Colour::new(colour[0], colour[1], colour[2]),
                         }),
                     );
-                    break;
+                    continue 'begin_search;
                 }
-                TextureConfig::Checkered(config) => {
-                    if texture_list.contains_key(&config.odd as &str)
-                        && texture_list.contains_key(&config.even as &str)
+                TextureConfig::Checkered {
+                    odd,
+                    even,
+                    tile_size,
+                } => {
+                    if texture_list.contains_key(&odd as &str)
+                        && texture_list.contains_key(&even as &str)
                     {
                         texture_list.insert(
                             name,
                             Arc::new(textures::Checkered {
-                                odd: Arc::clone(texture_list.get(&config.odd as &str).unwrap()),
-                                even: Arc::clone(texture_list.get(&config.even as &str).unwrap()),
-                                tile_size: config.tile_size,
+                                odd: Arc::clone(texture_list.get(&odd as &str).unwrap()),
+                                even: Arc::clone(texture_list.get(&even as &str).unwrap()),
+                                tile_size: *tile_size,
                             }),
                         );
+                        continue 'begin_search;
                     } else {
                         texture_configs.push_back((name, texture));
                     }
                 }
-                TextureConfig::ImageTexture(config) => {
-                    texture_list.insert(name, textures::ImageTexture::from_file(&config.filename)?);
+                TextureConfig::ImageTexture { filename } => {
+                    texture_list.insert(name, textures::ImageTexture::from_file(&filename)?);
+                    continue 'begin_search;
                 }
             }
         }
@@ -96,58 +130,61 @@ fn build_materials<'a>(
         .iter()
         .map(|(s, t)| (s as &str, t))
         .collect();
-    while material_configs.len() != 0 {
+    'begin_search: while material_configs.len() != 0 {
         for _ in 0..material_configs.len() {
             let (name, material) = material_configs.pop_front().unwrap();
             match material {
-                MaterialConfig::Lambertian(config) => {
+                MaterialConfig::Lambertian { texture } => {
                     let texture = textures
-                        .get(&config.texture as &str)
-                        .ok_or(anyhow!("Texture {} does not exist", config.texture))?;
+                        .get(&texture as &str)
+                        .ok_or(anyhow!("Texture {} does not exist", texture))?;
                     material_list.insert(name, materials::Lambertian::with_texture(texture));
+                    continue 'begin_search;
                 }
-                MaterialConfig::Metal(config) => {
+                MaterialConfig::Metal { fuzz, albedo } => {
                     material_list.insert(
                         name,
                         Arc::new(materials::Metal {
-                            albedo: Colour::new(
-                                config.albedo[0],
-                                config.albedo[1],
-                                config.albedo[2],
-                            ),
-                            fuzz: config.fuzz,
+                            albedo: Colour::new(albedo[0], albedo[1], albedo[2]),
+                            fuzz: *fuzz,
                         }),
                     );
+                    continue 'begin_search;
                 }
-                MaterialConfig::Dielectric(config) => {
+                MaterialConfig::Dielectric {
+                    index_of_refraction,
+                } => {
                     material_list.insert(
                         name,
                         Arc::new(materials::Dielectric {
-                            index_of_refraction: config.index_of_refraction,
+                            index_of_refraction: *index_of_refraction,
                         }),
                     );
+                    continue 'begin_search;
                 }
-                MaterialConfig::DiffuseLight(config) => {
+                MaterialConfig::DiffuseLight { emit } => {
                     let texture = textures
-                        .get(&config.emit as &str)
-                        .ok_or(anyhow!("Texture {} does not exist", config.emit))?;
+                        .get(&emit as &str)
+                        .ok_or(anyhow!("Texture {} does not exist", emit))?;
                     material_list.insert(
                         name,
                         Arc::new(materials::DiffuseLight {
                             emit: Arc::clone(texture),
                         }),
                     );
+                    continue 'begin_search;
                 }
-                MaterialConfig::Isotropic(config) => {
+                MaterialConfig::Isotropic { albedo } => {
                     let texture = textures
-                        .get(&config.albedo as &str)
-                        .ok_or(anyhow!("Texture {} does not exist", config.albedo))?;
+                        .get(&albedo as &str)
+                        .ok_or(anyhow!("Texture {} does not exist", albedo))?;
                     material_list.insert(
                         name,
                         Arc::new(materials::DiffuseLight {
                             emit: Arc::clone(texture),
                         }),
                     );
+                    continue 'begin_search;
                 }
             }
         }
@@ -169,147 +206,192 @@ fn build_hittables<'a>(
         .iter()
         .map(|(s, t)| (s as &str, t))
         .collect();
-    while hittable_configs.len() != 0 {
+    'begin_search: while hittable_configs.len() != 0 {
         for _ in 0..hittable_configs.len() {
             let (name, hittable) = hittable_configs.pop_front().unwrap();
             match hittable {
-                ObjectConfig::Sphere(config) => {
+                ObjectConfig::Sphere {
+                    centre,
+                    radius,
+                    material,
+                } => {
                     let material = materials
-                        .get(&config.material as &str)
-                        .ok_or(anyhow!("Material {} does not exist", config.material))?;
+                        .get(&material as &str)
+                        .ok_or(anyhow!("Material {} does not exist", material))?;
                     hittable_list.insert(
                         name,
                         objects::Sphere::new(
-                            Point3::new(config.centre[0], config.centre[1], config.centre[2]),
-                            config.radius,
+                            Point3::new(centre[0], centre[1], centre[2]),
+                            *radius,
                             material,
-                        )
-                        .into(),
+                        ),
                     );
+                    continue 'begin_search;
                 }
-                ObjectConfig::MovingSphere(config) => {
+                ObjectConfig::MovingSphere {
+                    centre0,
+                    centre1,
+                    time0,
+                    time1,
+                    radius,
+                    material,
+                } => {
                     let material = materials
-                        .get(&config.material as &str)
-                        .ok_or(anyhow!("Material {} does not exist", config.material))?;
+                        .get(&material as &str)
+                        .ok_or(anyhow!("Material {} does not exist", material))?;
                     hittable_list.insert(
                         name,
                         objects::MovingSphere::new(
-                            Point3::new(config.centre0[0], config.centre0[1], config.centre0[2]),
-                            Point3::new(config.centre1[0], config.centre1[1], config.centre1[2]),
-                            config.time0,
-                            config.time1,
-                            config.radius,
+                            Point3::new(centre0[0], centre0[1], centre0[2]),
+                            Point3::new(centre1[0], centre1[1], centre1[2]),
+                            *time0,
+                            *time1,
+                            *radius,
                             material,
-                        )
-                        .into(),
+                        ),
                     );
+                    continue 'begin_search;
                 }
-                ObjectConfig::Block(config) => {
+                ObjectConfig::Block {
+                    corner0,
+                    corner1,
+                    material,
+                } => {
                     let material = materials
-                        .get(&config.material as &str)
-                        .ok_or(anyhow!("Material {} does not exist", config.material))?;
+                        .get(&material as &str)
+                        .ok_or(anyhow!("Material {} does not exist", material))?;
                     hittable_list.insert(
                         name,
                         objects::Block::new(
-                            Point3::new(config.corner0[0], config.corner0[1], config.corner0[2]),
-                            Point3::new(config.corner1[0], config.corner1[1], config.corner1[2]),
+                            Point3::new(corner0[0], corner0[1], corner0[2]),
+                            Point3::new(corner1[0], corner1[1], corner1[2]),
                             material,
-                        )
-                        .into(),
+                        ),
                     );
+                    continue 'begin_search;
                 }
-                ObjectConfig::Rect(config) => {
+                ObjectConfig::Rect {
+                    corner0,
+                    corner1,
+                    facing_forward,
+                    material,
+                } => {
                     let material = materials
-                        .get(&config.material as &str)
-                        .ok_or(anyhow!("Material {} does not exist", config.material))?;
+                        .get(&material as &str)
+                        .ok_or(anyhow!("Material {} does not exist", material))?;
                     hittable_list.insert(
                         name,
-                        if config.corner0[0] == config.corner1[0] {
+                        if corner0[0] == corner1[0] {
                             objects::YZRect::new(
-                                config.corner0[1],
-                                config.corner0[2],
-                                config.corner1[1],
-                                config.corner1[2],
-                                config.corner0[0],
+                                corner0[1],
+                                corner1[1],
+                                corner0[2],
+                                corner1[2],
+                                corner0[0],
                                 material,
-                                config.facing_forward,
+                                *facing_forward,
                             )
-                            .into()
-                        } else if config.corner0[1] == config.corner1[1] {
-                            objects::YZRect::new(
-                                config.corner0[0],
-                                config.corner0[2],
-                                config.corner1[0],
-                                config.corner1[2],
-                                config.corner0[1],
+                        } else if corner0[1] == corner1[1] {
+                            objects::XZRect::new(
+                                corner0[0],
+                                corner1[0],
+                                corner0[2],
+                                corner1[2],
+                                corner0[1],
                                 material,
-                                config.facing_forward,
+                                *facing_forward,
                             )
-                            .into()
-                        } else if config.corner0[2] == config.corner1[2] {
+                        } else if corner0[2] == corner1[2] {
                             objects::XYRect::new(
-                                config.corner0[0],
-                                config.corner0[1],
-                                config.corner1[0],
-                                config.corner1[1],
-                                config.corner0[2],
+                                corner0[0],
+                                corner1[0],
+                                corner0[1],
+                                corner1[1],
+                                corner0[2],
                                 material,
-                                config.facing_forward,
+                                *facing_forward,
                             )
-                            .into()
                         } else {
                             bail!("Rectangles are 2d; corner0 and corner1 must be equal along one axis")
                         },
                     );
+                    continue 'begin_search;
                 }
-                ObjectConfig::ConstantMedium(config) => {
-                    if hittable_list.contains_key(&config.boundary as &str) {
+                ObjectConfig::Spotlight {
+                    looking_from,
+                    looking_at,
+                    length,
+                    width,
+                    light,
+                } => {
+                    hittable_list.insert(
+                        name,
+                        objects::Spotlight::new(
+                            Point3::new(looking_from[0], looking_from[1], looking_from[2]),
+                            Point3::new(looking_at[0], looking_at[1], looking_at[2]),
+                            *width,
+                            *length,
+                            Colour::new(light[0], light[1], light[2]),
+                        ),
+                    );
+                    continue 'begin_search;
+                }
+                ObjectConfig::ConstantMedium {
+                    boundary,
+                    phase_function,
+                    density,
+                } => {
+                    if hittable_list.contains_key(&boundary as &str) {
                         let material = materials
-                            .get(&config.phase_function as &str)
-                            .ok_or(anyhow!("Material {} does not exist", config.phase_function))?;
-                        let boundary = hittable_list.get(&config.boundary as &str).unwrap();
-                        let object =
-                            objects::ConstantMedium::new(boundary, material, config.density);
+                            .get(&phase_function as &str)
+                            .ok_or(anyhow!("Material {} does not exist", phase_function))?;
+                        let boundary = hittable_list.get(&boundary as &str).unwrap();
+                        let object = objects::ConstantMedium::new(boundary, material, *density);
                         hittable_list.insert(name, object.into());
+                        continue 'begin_search;
                     } else {
                         hittable_configs.push_back((name, hittable));
                     }
                 }
-                ObjectConfig::Translate(config) => {
-                    if hittable_list.contains_key(&config.prototype as &str) {
-                        let prototype = hittable_list.get(&config.prototype as &str).unwrap();
+                ObjectConfig::Translate { prototype, offset } => {
+                    if hittable_list.contains_key(&prototype as &str) {
+                        let prototype = hittable_list.get(&prototype as &str).unwrap();
                         let object = transforms::Translate::translate(
                             prototype,
-                            Vec3::new(config.offset[0], config.offset[1], config.offset[2]),
+                            Vec3::new(offset[0], offset[1], offset[2]),
                         );
                         hittable_list.insert(name, object.into());
+                        continue 'begin_search;
                     } else {
                         hittable_configs.push_back((name, hittable));
                     }
                 }
-                ObjectConfig::RotateX(config) => {
-                    if hittable_list.contains_key(&config.prototype as &str) {
-                        let prototype = hittable_list.get(&config.prototype as &str).unwrap();
-                        let object = transforms::RotateX::by_degrees(prototype, config.degrees);
+                ObjectConfig::RotateX { prototype, degrees } => {
+                    if hittable_list.contains_key(&prototype as &str) {
+                        let prototype = hittable_list.get(&prototype as &str).unwrap();
+                        let object = transforms::RotateX::by_degrees(prototype, *degrees);
                         hittable_list.insert(name, object.into());
+                        continue 'begin_search;
                     } else {
                         hittable_configs.push_back((name, hittable));
                     }
                 }
-                ObjectConfig::RotateY(config) => {
-                    if hittable_list.contains_key(&config.prototype as &str) {
-                        let prototype = hittable_list.get(&config.prototype as &str).unwrap();
-                        let object = transforms::RotateY::by_degrees(prototype, config.degrees);
+                ObjectConfig::RotateY { prototype, degrees } => {
+                    if hittable_list.contains_key(&prototype as &str) {
+                        let prototype = hittable_list.get(&prototype as &str).unwrap();
+                        let object = transforms::RotateY::by_degrees(prototype, *degrees);
                         hittable_list.insert(name, object.into());
+                        continue 'begin_search;
                     } else {
                         hittable_configs.push_back((name, hittable));
                     }
                 }
-                ObjectConfig::RotateZ(config) => {
-                    if hittable_list.contains_key(&config.prototype as &str) {
-                        let prototype = hittable_list.get(&config.prototype as &str).unwrap();
-                        let object = transforms::RotateZ::by_degrees(prototype, config.degrees);
+                ObjectConfig::RotateZ { prototype, degrees } => {
+                    if hittable_list.contains_key(&prototype as &str) {
+                        let prototype = hittable_list.get(&prototype as &str).unwrap();
+                        let object = transforms::RotateZ::by_degrees(prototype, *degrees);
                         hittable_list.insert(name, object.into());
+                        continue 'begin_search;
                     } else {
                         hittable_configs.push_back((name, hittable));
                     }
@@ -325,7 +407,10 @@ fn build_hittables<'a>(
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 struct MasterConfig {
+    camera: CameraConfig,
+    background: [f64; 3],
     textures: HashMap<String, TextureConfig>,
     materials: HashMap<String, MaterialConfig>,
     objects: HashMap<String, ObjectConfig>,
@@ -333,137 +418,103 @@ struct MasterConfig {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct CameraConfig {
+    look_from: [f64; 3],
+    look_at: [f64; 3],
+    direction_up: [f64; 3],
+    #[serde(rename = "fieldOfView")]
+    vertical_fov: f64,
+    aspect_ratio: f64,
+    aperture: f64,
+    #[serde(rename = "distanceToFocus")]
+    focus_dist: f64,
+    start_time: f64,
+    end_time: f64,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, tag = "type", rename_all = "camelCase")]
 enum TextureConfig {
-    SolidColour(SolidColourConfig),
-    Checkered(CheckeredConfig),
-    ImageTexture(ImageTextureConfig),
+    #[serde(rename_all = "camelCase")]
+    SolidColour { colour: [f64; 3] },
+    #[serde(rename_all = "camelCase")]
+    Checkered {
+        odd: String,
+        even: String,
+        tile_size: f64,
+    },
+    #[serde(rename_all = "camelCase")]
+    ImageTexture { filename: String },
 }
 
 #[derive(Deserialize)]
-struct SolidColourConfig {
-    colour: [f64; 3],
-}
-
-#[derive(Deserialize)]
-struct CheckeredConfig {
-    odd: String,
-    even: String,
-    tile_size: f64,
-}
-
-#[derive(Deserialize)]
-struct ImageTextureConfig {
-    filename: String,
-}
-
-#[derive(Deserialize)]
+#[serde(deny_unknown_fields, tag = "type", rename_all = "camelCase")]
 enum MaterialConfig {
-    Lambertian(LambertianConfig),
-    Metal(MetalConfig),
-    Dielectric(DielectricConfig),
-    DiffuseLight(DiffuseLightConfig),
-    Isotropic(IsotropicConfig),
+    #[serde(rename_all = "camelCase")]
+    Lambertian { texture: String },
+    #[serde(rename_all = "camelCase")]
+    Metal { fuzz: f64, albedo: [f64; 3] },
+    #[serde(rename_all = "camelCase")]
+    Dielectric { index_of_refraction: f64 },
+    #[serde(rename_all = "camelCase")]
+    DiffuseLight { emit: String },
+    #[serde(rename_all = "camelCase")]
+    Isotropic { albedo: String },
 }
 
 #[derive(Deserialize)]
-struct LambertianConfig {
-    texture: String,
-}
-
-#[derive(Deserialize)]
-struct MetalConfig {
-    fuzz: f64,
-    albedo: [f64; 3],
-}
-
-#[derive(Deserialize)]
-struct DielectricConfig {
-    index_of_refraction: f64,
-}
-
-#[derive(Deserialize)]
-struct DiffuseLightConfig {
-    emit: String,
-}
-
-#[derive(Deserialize)]
-struct IsotropicConfig {
-    albedo: String,
-}
-
-#[derive(Deserialize)]
+#[serde(deny_unknown_fields, tag = "type", rename_all = "camelCase")]
 enum ObjectConfig {
-    Sphere(SphereConfig),
-    MovingSphere(MovingSphereConfig),
-    Block(BlockConfig),
-    Rect(RectConfig),
-    ConstantMedium(ConstantMediumConfig),
-    Translate(TranslateConfig),
-    RotateX(RotateXConfig),
-    RotateY(RotateYConfig),
-    RotateZ(RotateZConfig),
-}
-
-#[derive(Deserialize)]
-struct SphereConfig {
-    centre: [f64; 3],
-    radius: f64,
-    material: String,
-}
-
-#[derive(Deserialize)]
-struct MovingSphereConfig {
-    centre0: [f64; 3],
-    centre1: [f64; 3],
-    time0: f64,
-    time1: f64,
-    radius: f64,
-    material: String,
-}
-
-#[derive(Deserialize)]
-struct BlockConfig {
-    corner0: [f64; 3],
-    corner1: [f64; 3],
-    material: String,
-}
-
-#[derive(Deserialize)]
-struct RectConfig {
-    // these must share one coordinate or it'll error out
-    corner0: [f64; 3],
-    corner1: [f64; 3],
-    facing_forward: bool,
-    material: String,
-}
-
-#[derive(Deserialize)]
-struct ConstantMediumConfig {
-    boundary: String,
-    phase_function: String,
-    density: f64,
-}
-
-#[derive(Deserialize)]
-struct TranslateConfig {
-    prototype: String,
-    offset: [f64; 3],
-}
-
-#[derive(Deserialize)]
-struct RotateXConfig {
-    prototype: String,
-    degrees: f64,
-}
-
-#[derive(Deserialize)]
-struct RotateYConfig {
-    prototype: String,
-    degrees: f64,
-}
-
-#[derive(Deserialize)]
-struct RotateZConfig {
-    prototype: String,
-    degrees: f64,
+    #[serde(rename_all = "camelCase")]
+    Sphere {
+        centre: [f64; 3],
+        radius: f64,
+        material: String,
+    },
+    #[serde(rename_all = "camelCase")]
+    MovingSphere {
+        centre0: [f64; 3],
+        centre1: [f64; 3],
+        time0: f64,
+        time1: f64,
+        radius: f64,
+        material: String,
+    },
+    #[serde(rename_all = "camelCase")]
+    Block {
+        corner0: [f64; 3],
+        corner1: [f64; 3],
+        material: String,
+    },
+    #[serde(rename_all = "camelCase")]
+    Rect {
+        // these must share one coordinate or it'll error out
+        corner0: [f64; 3],
+        corner1: [f64; 3],
+        facing_forward: bool,
+        material: String,
+    },
+    #[serde(rename_all = "camelCase")]
+    Spotlight {
+        looking_from: [f64; 3],
+        looking_at: [f64; 3],
+        length: f64,
+        width: f64,
+        light: [f64; 3],
+    },
+    #[serde(rename_all = "camelCase")]
+    ConstantMedium {
+        boundary: String,
+        phase_function: String,
+        density: f64,
+    },
+    #[serde(rename_all = "camelCase")]
+    Translate { prototype: String, offset: [f64; 3] },
+    #[serde(rename_all = "camelCase")]
+    RotateX { prototype: String, degrees: f64 },
+    #[serde(rename_all = "camelCase")]
+    RotateY { prototype: String, degrees: f64 },
+    #[serde(rename_all = "camelCase")]
+    RotateZ { prototype: String, degrees: f64 },
 }

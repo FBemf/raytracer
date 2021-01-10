@@ -17,6 +17,7 @@
         "bbox",
         "consts",
         "deque",
-        "hittables"
+        "hittables",
+        "signum"
     ]
 }
