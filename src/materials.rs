@@ -166,3 +166,38 @@ impl Material for Isotropic {
         format!("Isotropic: {}", self.albedo._print())
     }
 }
+
+pub struct CheckeredMaterial {
+    pub odd: Arc<dyn Material>,
+    pub even: Arc<dyn Material>,
+    pub tile_density: f64,
+}
+
+impl Material for CheckeredMaterial {
+    fn scatter(&self, ray: &Ray, hit: &HitRecord) -> Option<(Ray, Colour)> {
+        let sines =
+            (self.tile_density * hit.surface_u).sin() * (self.tile_density * hit.surface_v).sin();
+        if sines < 0.0 {
+            self.odd.scatter(ray, hit)
+        } else {
+            self.even.scatter(ray, hit)
+        }
+    }
+    fn emitted(&self, hit: &HitRecord) -> Colour {
+        let sines =
+            (self.tile_density * hit.surface_u).sin() * (self.tile_density * hit.surface_v).sin();
+        if sines < 0.0 {
+            self.odd.emitted(hit)
+        } else {
+            self.even.emitted(hit)
+        }
+    }
+    fn _print(&self) -> String {
+        format!(
+            "Checkered: tile size {}, tiles ({}, {})",
+            self.tile_density,
+            self.odd._print(),
+            self.even._print()
+        )
+    }
+}

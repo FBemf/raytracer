@@ -1,0 +1,103 @@
+{
+    // Two spheres at sunset
+    camera: {
+        lookFrom: [-100, 400, -800],
+        lookAt: [-100, 100, 0],
+        directionUp: [0, 1, 0],
+        fieldOfView: 40,
+        aspectRatio: [16, 10],
+        aperture: 0.1,
+        distanceToFocus: 100,
+        startTime: 0,
+        endTime: 1,
+    },
+    background: {
+        type: "gradient",
+        direction: [0, 1, 0],
+        colour0: [3, 1.65, 0.66],
+        colour1: [0, 0, 0],
+    },
+    textures: {
+        white: {
+            type: "solidColour",
+            colour: [0.73, 0.73, 0.73],
+        },
+        light: {
+            type: "solidColour",
+            colour: [90, 50, 20],
+        },
+    },
+    materials: {
+        white: {
+            type: "lambertian",
+            texture: "white",
+        },
+        light: {
+            type: "diffuseLight",
+            emit: "light",
+        },
+        glass: {
+            type: "dielectric",
+            indexOfRefraction: 1.5,
+        },
+        metal: {
+            type: "metal",
+            albedo: [0.73, 0.73, 0.73],
+            fuzz: 0,   
+        },
+        checkered: {
+            type: "checkered",
+            odd: "white",
+            even: "metal",
+            tileDensity: 20000,
+        },
+    },
+    objects: {
+        sun: {
+            type: "sphere",
+            centre: [4000, 0, 0],
+            radius: 1000,
+            material: "light",
+        },
+        floor: {
+            type: "rect",
+            corner0: [-999999, -1, -999999],
+            corner1: [999999, -1, 999999],
+            facingForward: true,
+            material: "checkered",
+        },
+        floorGlass: {
+            type: "rect",
+            corner0: [-999999, 0, -999999],
+            corner1: [999999, 0, 999999],
+            facingForward: true,
+            material: "glass",
+        },
+        sphere: {
+            type: "sphere",
+            centre: [-250, 100, 50],
+            radius: 99.5,
+            material: "white",
+        },
+        sphereGlass: {
+            type: "sphere",
+            centre: [-250, 100, 50],
+            radius: 100,
+            material: "glass",
+        },
+        sphere2: {
+            type: "sphere",
+            centre: [0, 100, 0],
+            radius: 100,
+            material: "glass",
+        },
+    },
+    world: [
+        "sun",
+        "floor",
+        "floorGlass",
+        "sphere",
+        "sphereGlass",
+        "sphere2",
+    ],
+}

@@ -85,7 +85,7 @@ fn build_textures(master_config: &MasterConfig) -> Result<HashMap<&str, Arc<dyn 
                 TextureConfig::Checkered {
                     odd,
                     even,
-                    tile_size,
+                    tile_density,
                 } => {
                     if texture_list.contains_key(&odd as &str)
                         && texture_list.contains_key(&even as &str)
@@ -95,7 +95,7 @@ fn build_textures(master_config: &MasterConfig) -> Result<HashMap<&str, Arc<dyn 
                             Arc::new(textures::Checkered {
                                 odd: Arc::clone(texture_list.get(&odd as &str).unwrap()),
                                 even: Arc::clone(texture_list.get(&even as &str).unwrap()),
-                                tile_size: *tile_size,
+                                tile_density: *tile_density,
                             }),
                         );
                         continue 'begin_search;
@@ -182,6 +182,27 @@ fn build_materials<'a>(
                         }),
                     );
                     continue 'begin_search;
+                }
+                MaterialConfig::Checkered {
+                    odd,
+                    even,
+                    tile_density,
+                } => {
+                    if material_list.contains_key(&odd as &str)
+                        && material_list.contains_key(&even as &str)
+                    {
+                        material_list.insert(
+                            name,
+                            Arc::new(materials::CheckeredMaterial {
+                                odd: Arc::clone(&material_list[odd as &str]),
+                                even: Arc::clone(&material_list[even as &str]),
+                                tile_density: *tile_density,
+                            }),
+                        );
+                        continue 'begin_search;
+                    }
+                    // couldn't build yet
+                    material_configs.push_back((name, material));
                 }
             }
         }
@@ -470,7 +491,7 @@ enum TextureConfig {
     Checkered {
         odd: String,
         even: String,
-        tile_size: f64,
+        tile_density: f64,
     },
     #[serde(rename_all = "camelCase")]
     ImageTexture { filename: String },
@@ -489,6 +510,12 @@ enum MaterialConfig {
     DiffuseLight { emit: String },
     #[serde(rename_all = "camelCase")]
     Isotropic { albedo: String },
+    #[serde(rename_all = "camelCase")]
+    Checkered {
+        odd: String,
+        even: String,
+        tile_density: f64,
+    },
 }
 
 #[derive(Deserialize)]
