@@ -1,4 +1,5 @@
 use rand::Rng;
+
 use std::cmp::Ordering;
 use std::fmt;
 use std::sync::Arc;
@@ -81,6 +82,7 @@ impl HitRecord {
 pub trait Hittable: Send + Sync {
     fn hit(&self, ray: &Ray, min_dist: f64, max_dist: f64) -> Option<HitRecord>;
     fn bounding_box(&self, time0: f64, time1: f64) -> Option<AABB>;
+    fn _print(&self) -> String;
 }
 
 impl Hittable for Vec<Arc<dyn Hittable>> {
@@ -119,6 +121,13 @@ impl Hittable for Vec<Arc<dyn Hittable>> {
         }
         Some(working_box)
     }
+    fn _print(&self) -> String {
+        let mut acc = String::from("vec: [");
+        for h in self {
+            acc += &(h._print() + ", ");
+        }
+        acc + "]"
+    }
 }
 
 pub trait Material: Send + Sync {
@@ -126,6 +135,7 @@ pub trait Material: Send + Sync {
     fn emitted(&self, _hit: &HitRecord) -> Colour {
         Colour::new(0, 0, 0)
     }
+    fn _print(&self) -> String;
 }
 
 pub struct BVHNode {
@@ -201,6 +211,13 @@ impl Hittable for BVHNode {
     }
     fn bounding_box(&self, _time0: f64, _time1: f64) -> Option<AABB> {
         Some(self.bbox)
+    }
+    fn _print(&self) -> String {
+        format!(
+            "bvhnode: ({}), ({})",
+            self.left._print(),
+            self.right._print()
+        )
     }
 }
 

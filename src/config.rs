@@ -5,9 +5,10 @@ use serde_derive::Deserialize;
 use std::collections::{HashMap, VecDeque};
 use std::fs::File;
 use std::io::Read;
+use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::camera::{Camera, Sky};
+use crate::camera::{gradient_background, Camera, Sky};
 use crate::hitting::{BVHNode, Colour, Hittable, Material};
 use crate::materials;
 use crate::math::{Point3, Vec3};
@@ -15,7 +16,7 @@ use crate::objects;
 use crate::textures::{self, Texture};
 use crate::transforms;
 
-pub fn load_config(filename: &str) -> Result<(Camera, Arc<dyn Hittable>, Sky, f64)> {
+pub fn load_config(filename: &PathBuf) -> Result<(Camera, Arc<dyn Hittable>, Sky, f64)> {
     let mut config_string = String::new();
     File::open(filename)?.read_to_string(&mut config_string)?;
     let config = json5::from_str(&config_string)?;
@@ -32,7 +33,8 @@ pub fn load_config(filename: &str) -> Result<(Camera, Arc<dyn Hittable>, Sky, f6
                 .ok_or(anyhow!("Object {} does not exist", s))
         })
         .collect::<Result<Vec<Arc<dyn Hittable>>>>()?;
-    let world = BVHNode::from_vec(world, 0.0, 1.0);
+    let world = BVHNode::from_vec(world, config.camera.start_time, config.camera.end_time);
+    let aspect_ratio = config.camera.aspect_ratio[0] / config.camera.aspect_ratio[1];
     let camera = Camera::new(
         Point3::new(
             config.camera.look_from[0],
@@ -50,19 +52,14 @@ pub fn load_config(filename: &str) -> Result<(Camera, Arc<dyn Hittable>, Sky, f6
             config.camera.direction_up[2],
         ),
         config.camera.vertical_fov,
-        config.camera.aspect_ratio,
+        aspect_ratio,
         config.camera.aperture,
         config.camera.focus_dist,
         config.camera.start_time,
         config.camera.end_time,
     );
-    let sky_colour = Colour::new(
-        config.background[0],
-        config.background[1],
-        config.background[2],
-    );
-    let sky: Sky = Box::new(move |_| sky_colour);
-    Ok((camera, world, sky, config.camera.aspect_ratio))
+    let sky = get_background(config.background);
+    Ok((camera, world, sky, aspect_ratio))
 }
 
 fn build_textures(master_config: &MasterConfig) -> Result<HashMap<&str, Arc<dyn Texture>>> {
@@ -180,8 +177,8 @@ fn build_materials<'a>(
                         .ok_or(anyhow!("Texture {} does not exist", albedo))?;
                     material_list.insert(
                         name,
-                        Arc::new(materials::DiffuseLight {
-                            emit: Arc::clone(texture),
+                        Arc::new(materials::Isotropic {
+                            albedo: Arc::clone(texture),
                         }),
                     );
                     continue 'begin_search;
@@ -318,8 +315,8 @@ fn build_hittables<'a>(
                     continue 'begin_search;
                 }
                 ObjectConfig::Spotlight {
-                    looking_from,
-                    looking_at,
+                    look_from,
+                    look_at,
                     length,
                     width,
                     light,
@@ -327,10 +324,10 @@ fn build_hittables<'a>(
                     hittable_list.insert(
                         name,
                         objects::Spotlight::new(
-                            Point3::new(looking_from[0], looking_from[1], looking_from[2]),
-                            Point3::new(looking_at[0], looking_at[1], looking_at[2]),
-                            *width,
+                            Point3::new(look_from[0], look_from[1], look_from[2]),
+                            Point3::new(look_at[0], look_at[1], look_at[2]),
                             *length,
+                            *width,
                             Colour::new(light[0], light[1], light[2]),
                         ),
                     );
@@ -347,7 +344,7 @@ fn build_hittables<'a>(
                             .ok_or(anyhow!("Material {} does not exist", phase_function))?;
                         let boundary = hittable_list.get(&boundary as &str).unwrap();
                         let object = objects::ConstantMedium::new(boundary, material, *density);
-                        hittable_list.insert(name, object.into());
+                        hittable_list.insert(name, object);
                         continue 'begin_search;
                     } else {
                         hittable_configs.push_back((name, hittable));
@@ -406,15 +403,46 @@ fn build_hittables<'a>(
     Ok(hittable_list)
 }
 
+fn get_background(config: BackgroundConfig) -> Sky {
+    match config {
+        BackgroundConfig::PlainColour { colour: [r, g, b] } => {
+            Box::new(move |_| Colour::new(r, g, b))
+        }
+        BackgroundConfig::Gradient {
+            direction,
+            colour0,
+            colour1,
+        } => {
+            let direction = Vec3::new(direction[0], direction[1], direction[2]);
+            let colour0 = Colour::new(colour0[0], colour0[1], colour0[2]);
+            let colour1 = Colour::new(colour1[0], colour1[1], colour1[2]);
+            gradient_background(direction, colour0, colour1)
+        }
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 struct MasterConfig {
     camera: CameraConfig,
-    background: [f64; 3],
+    background: BackgroundConfig,
     textures: HashMap<String, TextureConfig>,
     materials: HashMap<String, MaterialConfig>,
     objects: HashMap<String, ObjectConfig>,
     world: Vec<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, tag = "type", rename_all = "camelCase")]
+enum BackgroundConfig {
+    #[serde(rename_all = "camelCase")]
+    PlainColour { colour: [f64; 3] },
+    #[serde(rename_all = "camelCase")]
+    Gradient {
+        direction: [f64; 3],
+        colour0: [f64; 3],
+        colour1: [f64; 3],
+    },
 }
 
 #[derive(Deserialize)]
@@ -425,7 +453,7 @@ struct CameraConfig {
     direction_up: [f64; 3],
     #[serde(rename = "fieldOfView")]
     vertical_fov: f64,
-    aspect_ratio: f64,
+    aspect_ratio: [f64; 2],
     aperture: f64,
     #[serde(rename = "distanceToFocus")]
     focus_dist: f64,
@@ -497,8 +525,8 @@ enum ObjectConfig {
     },
     #[serde(rename_all = "camelCase")]
     Spotlight {
-        looking_from: [f64; 3],
-        looking_at: [f64; 3],
+        look_from: [f64; 3],
+        look_at: [f64; 3],
         length: f64,
         width: f64,
         light: [f64; 3],

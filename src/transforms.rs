@@ -49,6 +49,9 @@ impl Hittable for Translate {
             None
         }
     }
+    fn _print(&self) -> String {
+        format!("translate {}", self.original._print())
+    }
 }
 
 pub struct RotateX {
@@ -140,6 +143,9 @@ impl Hittable for RotateX {
     }
     fn bounding_box(&self, _time0: f64, _time1: f64) -> Option<AABB> {
         self.bbox
+    }
+    fn _print(&self) -> String {
+        format!("rotatex {}", self.original._print())
     }
 }
 
@@ -233,6 +239,9 @@ impl Hittable for RotateY {
     fn bounding_box(&self, _time0: f64, _time1: f64) -> Option<AABB> {
         self.bbox
     }
+    fn _print(&self) -> String {
+        format!("rotatey {}", self.original._print())
+    }
 }
 
 pub struct RotateZ {
@@ -324,5 +333,8 @@ impl Hittable for RotateZ {
     }
     fn bounding_box(&self, _time0: f64, _time1: f64) -> Option<AABB> {
         self.bbox
+    }
+    fn _print(&self) -> String {
+        format!("rotatez {}", self.original._print())
     }
 }

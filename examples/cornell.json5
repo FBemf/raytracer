@@ -5,13 +5,16 @@
         lookAt: [278, 278, 0],
         directionUp: [0, 1, 0],
         fieldOfView: 40,
-        aspectRatio: 1.0,
+        aspectRatio: [1, 1],
         aperture: 0.0,
         distanceToFocus: 900,
         startTime: 0,
         endTime: 1,
     },
-    background: [0, 0, 0],
+    background: {
+        type: "plainColour",
+        colour: [0, 0, 0],
+    },
     textures: {
         red: {
             type: "solidColour",

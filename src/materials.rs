@@ -1,4 +1,5 @@
 use rand::Rng;
+
 use std::sync::Arc;
 
 use crate::hitting::{Colour, HitRecord, Material};
@@ -42,6 +43,9 @@ impl Material for Lambertian {
                 .value(hit.surface_u, hit.surface_v, hit.intersection),
         ))
     }
+    fn _print(&self) -> String {
+        format!("Lambertian: {}", self.albedo._print())
+    }
 }
 
 pub struct Metal {
@@ -62,6 +66,9 @@ impl Material for Metal {
         } else {
             None
         }
+    }
+    fn _print(&self) -> String {
+        format!("Metal: albedo {}, fuzz {}", self.albedo, self.fuzz)
     }
 }
 
@@ -99,6 +106,9 @@ impl Material for Dielectric {
             Colour::new(1.0, 1.0, 1.0),
         ))
     }
+    fn _print(&self) -> String {
+        format!("Dielectric: ior {}", self.index_of_refraction)
+    }
 }
 
 fn reflectance(cosine: f64, ref_idx: f64) -> f64 {
@@ -131,6 +141,9 @@ impl Material for DiffuseLight {
             Colour::new(0, 0, 0)
         }
     }
+    fn _print(&self) -> String {
+        format!("Diffuse light: {}", self.emit._print())
+    }
 }
 
 pub struct Isotropic {
@@ -148,5 +161,8 @@ impl Material for Isotropic {
             self.albedo
                 .value(hit.surface_u, hit.surface_v, hit.intersection),
         ))
+    }
+    fn _print(&self) -> String {
+        format!("Isotropic: {}", self.albedo._print())
     }
 }

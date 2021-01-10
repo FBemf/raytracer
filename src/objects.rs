@@ -47,6 +47,14 @@ impl Hittable for Sphere {
             maximum: self.centre + Vec3::new(self.radius, self.radius, self.radius),
         })
     }
+    fn _print(&self) -> String {
+        format!(
+            "Sphere (centre: {}, radius: {}, material: {})",
+            self.centre,
+            self.radius,
+            self.material._print()
+        )
+    }
 }
 
 pub struct MovingSphere {
@@ -112,6 +120,12 @@ impl Hittable for MovingSphere {
         };
         Some(surrounding_box(&box0, &box1))
     }
+    fn _print(&self) -> String {
+        format!(
+            "Moving Sphere (centre0: {:?}, centre1: {:?}, time0: {}, time1: {}, radius: {}, material: {})",
+            self.centre0, self.centre1, self.time0, self.time1, self.radius, self.material._print()
+        )
+    }
 }
 
 pub struct Block {
@@ -163,6 +177,9 @@ impl Hittable for Block {
             minimum: self.minimum,
             maximum: self.maximum,
         })
+    }
+    fn _print(&self) -> String {
+        format!("Block (min: {}, max: {})", self.minimum, self.maximum)
     }
 }
 
@@ -225,6 +242,9 @@ impl Hittable for XYRect {
             maximum: Point3::new(self.x1, self.y1, self.k + 0.0001),
         })
     }
+    fn _print(&self) -> String {
+        String::from("rect")
+    }
 }
 
 pub struct XZRect {
@@ -286,6 +306,9 @@ impl Hittable for XZRect {
             maximum: Point3::new(self.x1, self.k + 0.0001, self.z1),
         })
     }
+    fn _print(&self) -> String {
+        String::from("rect")
+    }
 }
 
 pub struct YZRect {
@@ -346,6 +369,9 @@ impl Hittable for YZRect {
             minimum: Point3::new(self.k - 0.0001, self.y0, self.z0),
             maximum: Point3::new(self.k + 0.0001, self.y1, self.z1),
         })
+    }
+    fn _print(&self) -> String {
+        String::from("rect")
     }
 }
 
@@ -417,6 +443,14 @@ impl Hittable for ConstantMedium {
     fn bounding_box(&self, time0: f64, time1: f64) -> Option<AABB> {
         self.boundary.bounding_box(time0, time1)
     }
+    fn _print(&self) -> String {
+        format!(
+            "constant medium (boundary: {}, NID: {}, phase function: {})",
+            self.boundary._print(),
+            self.neg_inv_density,
+            self.phase_function._print(),
+        )
+    }
 }
 
 pub struct Spotlight {
@@ -427,8 +461,8 @@ pub struct Spotlight {
 
 impl Spotlight {
     pub fn new_primitive(minimum: Point3, maximum: Point3, light: Colour) -> Arc<dyn Hittable> {
-        //let dark = Lambertian::with_colour(Colour::new(0, 0, 0));
-        let dark = Lambertian::with_colour(Colour::new(0.3, 0.3, 0.3));
+        let dark = Lambertian::with_colour(Colour::new(0, 0, 0));
+        //let dark = Lambertian::with_colour(Colour::new(0.3, 0.3, 0.3));
         let light = DiffuseLight::with_colour(light);
         let panes = vec![
             XYRect::new(
@@ -501,5 +535,8 @@ impl Hittable for Spotlight {
             minimum: self.minimum,
             maximum: self.maximum,
         })
+    }
+    fn _print(&self) -> String {
+        format!("spotlight ({}, {})", self.minimum, self.maximum)
     }
 }

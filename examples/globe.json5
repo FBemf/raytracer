@@ -1,0 +1,49 @@
+{
+    // The world, in space
+    camera: {
+        lookAt: [0, 0, 0],
+        lookFrom: [0, 0, -2],
+        directionUp: [0, 1, 0],
+        fieldOfView: 110,
+        aspectRatio: [1, 1],
+        aperture: 0.0,
+        distanceToFocus: 900,
+        startTime: 0,
+        endTime: 1,
+    },
+    background: {
+        type: "gradient",
+        direction: [0, 1, 0],
+        colour0: [0, 0, 0],
+        colour1: [0.05, 0.05, 0.05],
+    },
+    textures: {
+        world: {
+            type: "imageTexture",
+            filename: "examples/globe.jpg",
+        }
+    },
+    materials: {
+        world: {
+            type: "lambertian",
+            texture: "world",
+        },
+    },
+    objects: {
+        globe: {
+            type: "sphere",
+            centre: [0, 0, 0],
+            radius: 1,
+            material: "world",
+        },
+        spotlight: {
+            type: "spotlight",
+            lookAt: [0, 0, 0],
+            lookFrom: [-3, 3, -3],
+            length: 4,
+            width: 0.3,
+            light: [9, 9, 2],
+        }
+    },
+    world: ["globe", "spotlight"],
+}

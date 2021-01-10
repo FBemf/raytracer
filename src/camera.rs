@@ -1,7 +1,7 @@
 use rand::Rng;
 
 use crate::hitting::Colour;
-use crate::math::{cross, random_in_unit_disc, Point3, Ray, Vec3};
+use crate::math::{cross, dot, random_in_unit_disc, Point3, Ray, Vec3};
 
 pub const TIME_MIN: f64 = 0.0;
 pub const TIME_MAX: f64 = 1.0;
@@ -75,4 +75,14 @@ impl Camera {
             time: rand::thread_rng().gen_range(self.start_time..=self.end_time),
         }
     }
+}
+
+pub fn gradient_background(dir: Vec3, col1: Colour, col2: Colour) -> Sky {
+    // col1 used to be 1,1,1, col2 used to be 0.5,0.7,1.0
+    let unit_dir = dir.unit_vector();
+    Box::new(move |ray: &Ray| {
+        let gradient_pos = dot(unit_dir, ray.direction.unit_vector());
+        let t = 0.5 * (gradient_pos + 1.0);
+        1.0 * ((1.0 - t) * col1 + t * col2)
+    })
 }

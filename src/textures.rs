@@ -8,6 +8,7 @@ use crate::math::{clamp, Point3};
 
 pub trait Texture: Send + Sync {
     fn value(&self, u: f64, v: f64, p: Point3) -> Colour;
+    fn _print(&self) -> String;
 }
 
 pub struct SolidColour {
@@ -17,6 +18,9 @@ pub struct SolidColour {
 impl Texture for SolidColour {
     fn value(&self, _u: f64, _v: f64, _p: Point3) -> Colour {
         self.colour
+    }
+    fn _print(&self) -> String {
+        format!("Solid colour: {}", self.colour)
     }
 }
 
@@ -36,6 +40,14 @@ impl Texture for Checkered {
         } else {
             self.even.value(u, v, p)
         }
+    }
+    fn _print(&self) -> String {
+        format!(
+            "Checkered: tile size {}, tiles ({}, {})",
+            self.tile_size,
+            self.odd._print(),
+            self.even._print()
+        )
     }
 }
 
@@ -64,5 +76,8 @@ impl Texture for ImageTexture {
         let colour_scale = 1.0 / 255.0;
         let pixel = self.image.get_pixel(i, j);
         colour_scale * Colour::new(pixel[0], pixel[1], pixel[2])
+    }
+    fn _print(&self) -> String {
+        format!("image texture")
     }
 }
