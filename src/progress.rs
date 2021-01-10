@@ -40,16 +40,17 @@ impl<'a> TimedProgressBar<'a> {
 
 impl Progress for TimedProgressBar<'_> {
     fn update(&mut self, numerator: usize, denominator: usize) -> Result<()> {
+        let length = self.length - self.label.len() - 14;
         let multiplier = self.chars.len() - 1;
-        let progress = multiplier * numerator * self.length / denominator;
-        let remainder = multiplier * self.length - progress;
+        let progress = multiplier * numerator * length / denominator;
+        let remainder = multiplier * length - progress;
         let full_char = self.chars.last().unwrap();
         let empty_char = self.chars.first().unwrap();
         let progress_modulus = progress % multiplier;
         let expected_time = if numerator != 0 {
             let secs = self.start_time.elapsed().as_secs() as usize * (denominator - numerator)
                 / numerator;
-            format!("{:3}:{:02}", secs / 60, secs % 60)
+            format!("{:4}:{:02}", secs / 60, secs % 60)
         } else {
             String::new()
         };

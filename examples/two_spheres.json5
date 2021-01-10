@@ -13,9 +13,10 @@
     },
     background: {
         type: "gradient",
-        direction: [0, 1, 0],
-        colour0: [3, 1.65, 0.66],
-        colour1: [0, 0, 0],
+        direction: [1, -0.2, 0],
+        colour0: [0, 0, 0],
+        //colour1: [1.5, 0.82, 0.33],
+        colour1: [0.8, 0.3, 0.6],
     },
     textures: {
         white: {
@@ -24,7 +25,7 @@
         },
         light: {
             type: "solidColour",
-            colour: [90, 50, 20],
+            colour: [150, 55, 0],
         },
     },
     materials: {
@@ -47,16 +48,16 @@
         },
         checkered: {
             type: "checkered",
-            odd: "white",
-            even: "metal",
-            tileDensity: 20000,
+            odd: "metal",
+            even: "white",
+            tileDensity: 26000,
         },
     },
     objects: {
         sun: {
             type: "sphere",
             centre: [4000, 0, 0],
-            radius: 1000,
+            radius: 500,
             material: "light",
         },
         floor: {
