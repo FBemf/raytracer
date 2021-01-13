@@ -79,7 +79,7 @@ pub fn refract(&direction: &Vec3, &normal: &Vec3, etai_over_etat: f64) -> Vec3 {
 
 impl std::ops::Add for Vec3 {
     type Output = Self;
-    fn add(self, other: Self) -> Self {
+    fn add(self, other: Self) -> Self::Output {
         Self {
             x: self.x + other.x,
             y: self.y + other.y,
@@ -97,7 +97,7 @@ impl std::ops::AddAssign for Vec3 {
 
 impl std::ops::Sub for Vec3 {
     type Output = Self;
-    fn sub(self, other: Self) -> Self {
+    fn sub(self, other: Self) -> Self::Output {
         Self {
             x: self.x - other.x,
             y: self.y - other.y,
@@ -125,8 +125,8 @@ impl std::ops::Neg for Vec3 {
 }
 
 impl std::ops::Mul<f64> for Vec3 {
-    type Output = Vec3;
-    fn mul(self, other: f64) -> Vec3 {
+    type Output = Self;
+    fn mul(self, other: f64) -> Self::Output {
         Vec3 {
             x: self.x * other,
             y: self.y * other,
@@ -137,26 +137,21 @@ impl std::ops::Mul<f64> for Vec3 {
 
 impl std::ops::Mul<Vec3> for f64 {
     type Output = Vec3;
-    fn mul(self, other: Vec3) -> Vec3 {
-        Vec3 {
-            x: other.x * self,
-            y: other.y * self,
-            z: other.z * self,
-        }
+    fn mul(self, other: Vec3) -> Self::Output {
+        other * self
     }
 }
 
 impl std::ops::MulAssign<f64> for Vec3 {
     fn mul_assign(&mut self, other: f64) {
-        self.x *= other;
-        self.y *= other;
-        self.z *= other;
+        let new = *self * other;
+        *self = new;
     }
 }
 
 impl std::ops::Div<f64> for Vec3 {
-    type Output = Vec3;
-    fn div(self, other: f64) -> Vec3 {
+    type Output = Self;
+    fn div(self, other: f64) -> Self::Output {
         Vec3 {
             x: self.x / other,
             y: self.y / other,
@@ -167,9 +162,8 @@ impl std::ops::Div<f64> for Vec3 {
 
 impl std::ops::DivAssign<f64> for Vec3 {
     fn div_assign(&mut self, other: f64) {
-        self.x /= other;
-        self.y /= other;
-        self.z /= other;
+        let new = *self / other;
+        *self = new;
     }
 }
 
@@ -202,6 +196,7 @@ impl fmt::Display for Vec3 {
     }
 }
 
+// direction must be a unit vector
 #[derive(Debug)]
 pub struct Ray {
     pub origin: Point3,
@@ -210,6 +205,13 @@ pub struct Ray {
 }
 
 impl Ray {
+    pub fn new(origin: Point3, direction: Vec3, time: f64) -> Ray {
+        Ray {
+            origin,
+            direction: direction.unit_vector(),
+            time,
+        }
+    }
     pub fn at(&self, t: f64) -> Point3 {
         self.origin + t * self.direction
     }
@@ -291,6 +293,174 @@ pub fn get_sphere_uv(p: Point3) -> (f64, f64) {
     (u, v)
 }
 
+#[derive(Copy, Clone, Debug, PartialEq)]
+struct Vec4([f64; 4]);
+
+impl std::ops::Add for Vec4 {
+    type Output = Self;
+    fn add(self, other: Self) -> Self::Output {
+        Self([
+            self.0[0] + other.0[0],
+            self.0[1] + other.0[1],
+            self.0[2] + other.0[2],
+            self.0[3] + other.0[3],
+        ])
+    }
+}
+
+impl std::ops::AddAssign for Vec4 {
+    fn add_assign(&mut self, other: Self) {
+        let new = *self + other;
+        *self = new;
+    }
+}
+
+impl std::ops::Sub for Vec4 {
+    type Output = Self;
+    fn sub(self, other: Self) -> Self::Output {
+        Self([
+            self.0[0] - other.0[0],
+            self.0[1] - other.0[1],
+            self.0[2] - other.0[2],
+            self.0[3] - other.0[3],
+        ])
+    }
+}
+
+impl std::ops::SubAssign for Vec4 {
+    fn sub_assign(&mut self, other: Self) {
+        let new = *self - other;
+        *self = new;
+    }
+}
+
+impl std::ops::Neg for Vec4 {
+    type Output = Self;
+    fn neg(self) -> Self {
+        Self([-self.0[0], -self.0[1], -self.0[2], -self.0[3]])
+    }
+}
+
+impl std::ops::Mul<f64> for Vec4 {
+    type Output = Self;
+    fn mul(self, other: f64) -> Self::Output {
+        Self([
+            self.0[0] * other,
+            self.0[1] * other,
+            self.0[2] * other,
+            self.0[3] * other,
+        ])
+    }
+}
+
+impl std::ops::Mul<Vec4> for f64 {
+    type Output = Vec4;
+    fn mul(self, other: Vec4) -> Self::Output {
+        other * self
+    }
+}
+
+impl std::ops::MulAssign<f64> for Vec4 {
+    fn mul_assign(&mut self, other: f64) {
+        let new = *self * other;
+        *self = new;
+    }
+}
+
+impl std::ops::Div<f64> for Vec4 {
+    type Output = Self;
+    fn div(self, other: f64) -> Self::Output {
+        Vec4([
+            self.0[0] / other,
+            self.0[1] / other,
+            self.0[2] / other,
+            self.0[3] / other,
+        ])
+    }
+}
+
+impl std::ops::DivAssign<f64> for Vec4 {
+    fn div_assign(&mut self, other: f64) {
+        let new = *self / other;
+        *self = new;
+    }
+}
+
+impl std::ops::Index<usize> for Vec4 {
+    type Output = f64;
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.0[index]
+    }
+}
+
+impl std::ops::IndexMut<usize> for Vec4 {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.0[index]
+    }
+}
+
+pub fn solve_vec3_system(a: Vec3, b: Vec3, c: Vec3, u: Vec3) -> Option<Vec3> {
+    let mut rows = [
+        Vec4([a.x, b.x, c.x, u.x]),
+        Vec4([a.y, b.y, c.y, u.y]),
+        Vec4([a.z, b.z, c.z, u.z]),
+    ];
+    const NUM_ROWS: usize = 3;
+    const NUM_COLUMNS: usize = 3;
+
+    let mut working_row = 0;
+    for working_column in 0..NUM_COLUMNS {
+        // reduce leading cells to 1 or 0
+        for r in rows[working_row..].iter_mut() {
+            if r[working_column] != 0.0 {
+                *r /= r[working_column];
+                r[working_column] = 1.0;
+            }
+        }
+        // make top remaining row a 1 if possible
+        if rows[working_row][working_column] == 0.0 {
+            for i in working_row + 1..NUM_ROWS {
+                if rows[i][working_column] != 0.0 {
+                    rows.swap(working_row, i);
+                    break;
+                }
+            }
+        }
+        // if it *is* a 1, subtract it from all the other rows to reduce
+        if rows[working_row][working_column] != 0.0 {
+            // rows below
+            for i in working_row + 1..NUM_ROWS {
+                if rows[i][working_column] != 0.0 {
+                    rows[i] -= rows[working_row];
+                    rows[i][working_column] = 0.0;
+                }
+            }
+            // rows above
+            for i in 0..working_row {
+                rows[i] -= rows[working_row] * rows[i][working_column];
+                rows[i][working_column] = 0.0;
+            }
+            working_row += 1;
+        }
+    }
+
+    // now, the matrix is in RREF
+    let mut working_row = 0;
+    let mut out = Vec3::new(0, 0, 0);
+    for working_column in 0..NUM_COLUMNS {
+        if rows[working_row][working_column] == 1.0 {
+            out[working_row] = rows[working_column][NUM_COLUMNS];
+            working_row += 1;
+        }
+    }
+    for i in working_row..3 {
+        if rows[i][3] != 0.0 {
+            return None;
+        }
+    }
+    Some(out)
+}
+
 #[test]
 fn test_cross_product() {
     assert_eq!(
@@ -306,5 +476,36 @@ fn test_refract() {
         let b = (random_unit_vector() - (2.0 * a)).unit_vector();
         let c = refract(&a, &b, 1.0);
         assert!((a - c).near_zero());
+    }
+}
+
+#[test]
+fn test_matrix_reductions() {
+    let tests = [
+        [
+            Vec3::new(1, 2, 3),
+            Vec3::new(-1, 2, 1),
+            Vec3::new(0, 2, -2),
+            Vec3::new(5, 1, -1),
+        ],
+        [
+            Vec3::new(0, 9, 3),
+            Vec3::new(1, 2, 4),
+            Vec3::new(0, 2, -2),
+            Vec3::new(5, 1, 0),
+        ],
+        [
+            Vec3::new(0, 9, 3),
+            Vec3::new(0, 2, 4),
+            Vec3::new(0, 2, -2),
+            Vec3::new(5, 1, 0),
+        ],
+    ];
+    for a in tests.iter() {
+        if let Some(result) = solve_vec3_system(a[0], a[1], a[2], a[3]) {
+            assert_eq!(result[0] * a[0] + result[1] * a[1] + result[2] * a[2], a[3]);
+        } else {
+            eprintln!("{:?} is unsatisfiable", a);
+        }
     }
 }

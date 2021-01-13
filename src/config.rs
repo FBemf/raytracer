@@ -82,27 +82,6 @@ fn build_textures(master_config: &MasterConfig) -> Result<HashMap<&str, Arc<dyn 
                     );
                     continue 'begin_search;
                 }
-                TextureConfig::Checkered {
-                    odd,
-                    even,
-                    tile_density,
-                } => {
-                    if texture_list.contains_key(&odd as &str)
-                        && texture_list.contains_key(&even as &str)
-                    {
-                        texture_list.insert(
-                            name,
-                            Arc::new(textures::Checkered {
-                                odd: Arc::clone(texture_list.get(&odd as &str).unwrap()),
-                                even: Arc::clone(texture_list.get(&even as &str).unwrap()),
-                                tile_density: *tile_density,
-                            }),
-                        );
-                        continue 'begin_search;
-                    } else {
-                        texture_configs.push_back((name, texture));
-                    }
-                }
                 TextureConfig::ImageTexture { filename } => {
                     texture_list.insert(name, textures::ImageTexture::from_file(&filename)?);
                     continue 'begin_search;
@@ -193,7 +172,7 @@ fn build_materials<'a>(
                     {
                         material_list.insert(
                             name,
-                            Arc::new(materials::CheckeredMaterial {
+                            Arc::new(materials::Checkered {
                                 odd: Arc::clone(&material_list[odd as &str]),
                                 even: Arc::clone(&material_list[even as &str]),
                                 tile_density: *tile_density,
@@ -332,6 +311,28 @@ fn build_hittables<'a>(
                         } else {
                             bail!("Rectangles are 2d; corner0 and corner1 must be equal along one axis")
                         },
+                    );
+                    continue 'begin_search;
+                }
+                ObjectConfig::Plane {
+                    point0,
+                    point1,
+                    point2,
+                    uv_repeat,
+                    material,
+                } => {
+                    let material = materials
+                        .get(&material as &str)
+                        .ok_or(anyhow!("Material {} does not exist", material))?;
+                    hittable_list.insert(
+                        name,
+                        objects::Plane::new(
+                            Point3::new(point0[0], point0[1], point0[2]),
+                            Point3::new(point1[0], point1[1], point1[2]),
+                            Point3::new(point2[0], point2[1], point2[2]),
+                            *uv_repeat,
+                            material,
+                        ),
                     );
                     continue 'begin_search;
                 }
@@ -488,12 +489,6 @@ enum TextureConfig {
     #[serde(rename_all = "camelCase")]
     SolidColour { colour: [f64; 3] },
     #[serde(rename_all = "camelCase")]
-    Checkered {
-        odd: String,
-        even: String,
-        tile_density: f64,
-    },
-    #[serde(rename_all = "camelCase")]
     ImageTexture { filename: String },
 }
 
@@ -548,6 +543,14 @@ enum ObjectConfig {
         corner0: [f64; 3],
         corner1: [f64; 3],
         facing_forward: bool,
+        material: String,
+    },
+    #[serde(rename_all = "camelCase")]
+    Plane {
+        point0: [f64; 3],
+        point1: [f64; 3],
+        point2: [f64; 3],
+        uv_repeat: f64,
         material: String,
     },
     #[serde(rename_all = "camelCase")]

@@ -145,11 +145,16 @@ pub struct BVHNode {
 }
 
 impl BVHNode {
-    pub fn from_vec(
-        mut objects: Vec<Arc<dyn Hittable>>,
-        time0: f64,
-        time1: f64,
-    ) -> Arc<dyn Hittable> {
+    pub fn from_vec(objects: Vec<Arc<dyn Hittable>>, time0: f64, time1: f64) -> Arc<dyn Hittable> {
+        let mut no_bbox: Vec<Arc<dyn Hittable>> = objects
+            .iter()
+            .filter(|x| x.bounding_box(time0, time1).is_none())
+            .map(|x| Arc::clone(x))
+            .collect();
+        let mut objects: Vec<Arc<dyn Hittable>> = objects
+            .into_iter()
+            .filter(|x| x.bounding_box(time0, time1).is_some())
+            .collect();
         let axis = rand::thread_rng().gen_range(0..3);
         objects.sort_by(|a, b| bbox_compare(a, b, axis));
         if objects.len() == 0 {
@@ -169,11 +174,19 @@ impl BVHNode {
                 .bounding_box(time0, time1)
                 .expect("BHVNode unable to find bbox of subtree");
 
-            Arc::new(BVHNode {
+            let bvh_result: Arc<dyn Hittable> = Arc::new(BVHNode {
                 left,
                 right,
                 bbox: surrounding_box(&left_bbox, &right_bbox),
-            })
+            });
+
+            if no_bbox.len() == 0 {
+                bvh_result
+            } else {
+                let mut result: Vec<Arc<dyn Hittable>> = vec![bvh_result];
+                result.append(&mut no_bbox);
+                Arc::new(result)
+            }
         }
     }
 }
@@ -214,7 +227,7 @@ impl Hittable for BVHNode {
     }
     fn _print(&self) -> String {
         format!(
-            "bvhnode: ({}), ({})",
+            "bvhNode: ({}), ({})",
             self.left._print(),
             self.right._print()
         )

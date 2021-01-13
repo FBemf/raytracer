@@ -1,5 +1,6 @@
 use rand::Rng;
 
+use std::f64::consts::PI;
 use std::sync::Arc;
 
 use crate::hitting::{Colour, HitRecord, Material};
@@ -32,11 +33,7 @@ impl Material for Lambertian {
         } else {
             scatter_direction
         };
-        let scattered = Ray {
-            origin: hit.intersection,
-            direction: scatter_direction,
-            time: ray.time,
-        };
+        let scattered = Ray::new(hit.intersection, scatter_direction, ray.time);
         Some((
             scattered,
             self.albedo
@@ -56,11 +53,11 @@ pub struct Metal {
 impl Material for Metal {
     fn scatter(&self, ray: &Ray, hit: &HitRecord) -> Option<(Ray, Colour)> {
         let reflected = reflect(&ray.direction.unit_vector(), &hit.normal);
-        let scattered = Ray {
-            origin: hit.intersection,
-            direction: reflected + self.fuzz * random_in_unit_sphere(),
-            time: ray.time,
-        };
+        let scattered = Ray::new(
+            hit.intersection,
+            reflected + self.fuzz * random_in_unit_sphere(),
+            ray.time,
+        );
         if dot(scattered.direction, hit.normal) > 0.0 {
             Some((scattered, self.albedo))
         } else {
@@ -98,11 +95,7 @@ impl Material for Dielectric {
             };
 
         Some((
-            Ray {
-                origin: hit.intersection,
-                direction: direction,
-                time: ray.time,
-            },
+            Ray::new(hit.intersection, direction, ray.time),
             Colour::new(1.0, 1.0, 1.0),
         ))
     }
@@ -153,11 +146,7 @@ pub struct Isotropic {
 impl Material for Isotropic {
     fn scatter(&self, ray: &Ray, hit: &HitRecord) -> Option<(Ray, Colour)> {
         Some((
-            Ray {
-                origin: hit.intersection,
-                direction: random_in_unit_sphere(),
-                time: ray.time,
-            },
+            Ray::new(hit.intersection, random_in_unit_sphere(), ray.time),
             self.albedo
                 .value(hit.surface_u, hit.surface_v, hit.intersection),
         ))
@@ -167,16 +156,16 @@ impl Material for Isotropic {
     }
 }
 
-pub struct CheckeredMaterial {
+pub struct Checkered {
     pub odd: Arc<dyn Material>,
     pub even: Arc<dyn Material>,
     pub tile_density: f64,
 }
 
-impl Material for CheckeredMaterial {
+impl Material for Checkered {
     fn scatter(&self, ray: &Ray, hit: &HitRecord) -> Option<(Ray, Colour)> {
-        let sines =
-            (self.tile_density * hit.surface_u).sin() * (self.tile_density * hit.surface_v).sin();
+        let sines = (self.tile_density * PI * hit.surface_u).sin()
+            * (self.tile_density * PI * hit.surface_v).sin();
         if sines < 0.0 {
             self.odd.scatter(ray, hit)
         } else {

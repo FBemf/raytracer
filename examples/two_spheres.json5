@@ -15,8 +15,8 @@
         type: "gradient",
         direction: [1, -0.2, 0],
         colour0: [0, 0, 0],
-        //colour1: [1.5, 0.82, 0.33],
-        colour1: [0.8, 0.3, 0.6],
+        colour1: [1.5, 0.82, 0.33],   // peach
+        //colour1: [0.8, 0.3, 0.6],     // purple
     },
     textures: {
         white: {
@@ -25,7 +25,7 @@
         },
         light: {
             type: "solidColour",
-            colour: [150, 55, 0],
+            colour: [150, 55, 0],     // peach
         },
     },
     materials: {
@@ -50,7 +50,8 @@
             type: "checkered",
             odd: "metal",
             even: "white",
-            tileDensity: 26000,
+            //tileDensity: 26000,
+            tileDensity: 2,
         },
     },
     objects: {
@@ -60,18 +61,34 @@
             radius: 500,
             material: "light",
         },
-        floor: {
+        floorR: {
             type: "rect",
             corner0: [-999999, -1, -999999],
             corner1: [999999, -1, 999999],
             facingForward: true,
             material: "checkered",
         },
-        floorGlass: {
+        floorGlassR: {
             type: "rect",
             corner0: [-999999, 0, -999999],
             corner1: [999999, 0, 999999],
             facingForward: true,
+            material: "glass",
+        },
+        floor: {
+            type: "plane",
+            point0: [0, -1, 0],
+            point1: [0, -1, 1],
+            point2: [1, -1, 0],
+            uvRepeat: 400,
+            material: "checkered",
+        },
+        floorGlass: {
+            type: "plane",
+            point0: [0, 0, 0],
+            point1: [0, 0, 1],
+            point2: [1, 0, 0],
+            uvRepeat: 80,
             material: "glass",
         },
         sphere: {
@@ -95,8 +112,8 @@
     },
     world: [
         "sun",
-        "floor",
-        "floorGlass",
+        "floorR",
+        "floorGlassR",
         "sphere",
         "sphereGlass",
         "sphere2",

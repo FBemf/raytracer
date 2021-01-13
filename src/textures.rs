@@ -24,31 +24,6 @@ impl Texture for SolidColour {
     }
 }
 
-pub struct Checkered {
-    pub odd: Arc<dyn Texture>,
-    pub even: Arc<dyn Texture>,
-    pub tile_density: f64,
-}
-
-impl Texture for Checkered {
-    fn value(&self, u: f64, v: f64, p: Point3) -> Colour {
-        let sines = (self.tile_density * u).sin() * (self.tile_density * v).sin();
-        if sines < 0.0 {
-            self.odd.value(u, v, p)
-        } else {
-            self.even.value(u, v, p)
-        }
-    }
-    fn _print(&self) -> String {
-        format!(
-            "Checkered: tile size {}, tiles ({}, {})",
-            self.tile_density,
-            self.odd._print(),
-            self.even._print()
-        )
-    }
-}
-
 pub struct ImageTexture {
     pub image: ImageBuffer<Rgb<u8>, Vec<u8>>,
 }

@@ -4,7 +4,9 @@ use std::sync::Arc;
 
 use crate::hitting::{surrounding_box, Colour, HitRecord, Hittable, Material, AABB};
 use crate::materials::{DiffuseLight, Lambertian};
-use crate::math::{distance_to_sphere, dot, get_sphere_uv, Point3, Ray, Vec3};
+use crate::math::{
+    cross, distance_to_sphere, dot, get_sphere_uv, solve_vec3_system, Point3, Ray, Vec3,
+};
 use crate::transforms::{RotateY, RotateZ, Translate};
 
 pub struct Sphere {
@@ -453,6 +455,73 @@ impl Hittable for ConstantMedium {
     }
 }
 
+pub struct Plane {
+    point: Point3,
+    vec1: Vec3,
+    vec2: Vec3,
+    uv_repeat: f64,
+    normal: Vec3,
+    material: Arc<dyn Material>,
+}
+
+impl Plane {
+    pub fn new(
+        a: Point3,
+        b: Point3,
+        c: Point3,
+        uv_repeat: f64,
+        material: &Arc<dyn Material>,
+    ) -> Arc<dyn Hittable> {
+        let vec1 = (b - a).unit_vector();
+        let normal = cross(vec1, c - a).unit_vector();
+        let vec2 = cross(normal, vec1);
+        Arc::new(Plane {
+            point: a,
+            vec1,
+            vec2,
+            uv_repeat,
+            normal,
+            material: Arc::clone(material),
+        })
+    }
+}
+
+impl Hittable for Plane {
+    fn hit(&self, ray: &Ray, min_dist: f64, max_dist: f64) -> Option<HitRecord> {
+        if let Some(solution) = solve_vec3_system(
+            ray.direction,
+            -self.vec1,
+            -self.vec2,
+            self.point - ray.origin,
+        ) {
+            let distance = solution[0];
+            if distance < min_dist || distance > max_dist {
+                None
+            } else {
+                let u = (solution[1] % self.uv_repeat) / self.uv_repeat;
+                let v = (-solution[2] % self.uv_repeat) / self.uv_repeat;
+                let u = if u < 0.0 { 1.0 + u } else { u };
+                let v = if v < 0.0 { 1.0 + v } else { v };
+                Some(HitRecord::new(
+                    ray,
+                    distance,
+                    self.normal,
+                    Arc::clone(&self.material),
+                    (u, v),
+                ))
+            }
+        } else {
+            None
+        }
+    }
+    fn bounding_box(&self, _time0: f64, _time1: f64) -> Option<AABB> {
+        None
+    }
+    fn _print(&self) -> String {
+        format!("plane ({}, {}, {})", self.point, self.vec1, self.vec2)
+    }
+}
+
 pub struct Spotlight {
     minimum: Point3,
     maximum: Point3,
@@ -539,4 +608,18 @@ impl Hittable for Spotlight {
     fn _print(&self) -> String {
         format!("spotlight ({}, {})", self.minimum, self.maximum)
     }
+}
+
+#[test]
+fn plane_test() {
+    let material = Lambertian::with_colour(Colour::new(1, 1, 1));
+    let plane = Plane::new(
+        Point3::new(0, 0, 0),
+        Point3::new(0, 0, 1),
+        Point3::new(1, 0, 0),
+        5.0,
+        &material,
+    );
+    let r1 = Ray::new(Point3::new(0, 5, 0), Vec3::new(-1.3, -1, 1), 0.0);
+    dbg!(plane.hit(&r1, 0.0, f64::INFINITY));
 }

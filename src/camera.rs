@@ -67,13 +67,11 @@ impl Camera {
     pub fn find_ray(&self, s: f64, t: f64) -> Ray {
         let rd = self.lens_radius * random_in_unit_disc();
         let offset = self.u * rd.x + self.v * rd.y;
-        Ray {
-            origin: self.origin + offset,
-            direction: self.lower_left_corner + s * self.horizontal + t * self.vertical
-                - self.origin
-                - offset,
-            time: rand::thread_rng().gen_range(self.start_time..=self.end_time),
-        }
+        Ray::new(
+            self.origin + offset,
+            self.lower_left_corner + s * self.horizontal + t * self.vertical - self.origin - offset,
+            rand::thread_rng().gen_range(self.start_time..=self.end_time),
+        )
     }
 }
 

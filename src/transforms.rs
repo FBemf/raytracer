@@ -20,11 +20,7 @@ impl Translate {
 
 impl Hittable for Translate {
     fn hit(&self, ray: &Ray, min_dist: f64, max_dist: f64) -> Option<HitRecord> {
-        let moved_ray = Ray {
-            origin: ray.origin - self.offset,
-            direction: ray.direction,
-            time: ray.time,
-        };
+        let moved_ray = Ray::new(ray.origin - self.offset, ray.direction, ray.time);
         if let Some(hit) = self.original.hit(&moved_ray, min_dist, max_dist) {
             Some(HitRecord {
                 distance: hit.distance,
@@ -113,11 +109,7 @@ impl Hittable for RotateX {
         let y = self.sin_theta * ray.direction.z + self.cos_theta * ray.direction.y;
         let direction = Vec3::new(ray.direction.x, y, z);
 
-        let rotated = Ray {
-            origin,
-            direction,
-            time: ray.time,
-        };
+        let rotated = Ray::new(origin, direction, ray.time);
 
         if let Some(hit) = self.original.hit(&rotated, min_dist, max_dist) {
             let z = self.cos_theta * hit.intersection.z + self.sin_theta * hit.intersection.y;
@@ -145,7 +137,7 @@ impl Hittable for RotateX {
         self.bbox
     }
     fn _print(&self) -> String {
-        format!("rotatex {}", self.original._print())
+        format!("rotate x {}", self.original._print())
     }
 }
 
@@ -208,11 +200,7 @@ impl Hittable for RotateY {
         let z = self.sin_theta * ray.direction.x + self.cos_theta * ray.direction.z;
         let direction = Vec3::new(x, ray.direction.y, z);
 
-        let rotated = Ray {
-            origin,
-            direction,
-            time: ray.time,
-        };
+        let rotated = Ray::new(origin, direction, ray.time);
 
         if let Some(hit) = self.original.hit(&rotated, min_dist, max_dist) {
             let x = self.cos_theta * hit.intersection.x + self.sin_theta * hit.intersection.z;
@@ -240,7 +228,7 @@ impl Hittable for RotateY {
         self.bbox
     }
     fn _print(&self) -> String {
-        format!("rotatey {}", self.original._print())
+        format!("rotate y {}", self.original._print())
     }
 }
 
@@ -303,11 +291,7 @@ impl Hittable for RotateZ {
         let x = self.sin_theta * ray.direction.y + self.cos_theta * ray.direction.x;
         let direction = Vec3::new(x, y, ray.direction.z);
 
-        let rotated = Ray {
-            origin,
-            direction,
-            time: ray.time,
-        };
+        let rotated = Ray::new(origin, direction, ray.time);
 
         if let Some(hit) = self.original.hit(&rotated, min_dist, max_dist) {
             let y = self.cos_theta * hit.intersection.y + self.sin_theta * hit.intersection.x;
@@ -335,6 +319,6 @@ impl Hittable for RotateZ {
         self.bbox
     }
     fn _print(&self) -> String {
-        format!("rotatez {}", self.original._print())
+        format!("rotate z {}", self.original._print())
     }
 }
