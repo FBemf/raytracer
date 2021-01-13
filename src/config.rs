@@ -314,6 +314,26 @@ fn build_hittables<'a>(
                     );
                     continue 'begin_search;
                 }
+                ObjectConfig::Triangle {
+                    point0,
+                    point1,
+                    point2,
+                    material,
+                } => {
+                    let material = materials
+                        .get(&material as &str)
+                        .ok_or(anyhow!("Material {} does not exist", material))?;
+                    hittable_list.insert(
+                        name,
+                        objects::Triangle::new(
+                            Point3::new(point0[0], point0[1], point0[2]),
+                            Point3::new(point1[0], point1[1], point1[2]),
+                            Point3::new(point2[0], point2[1], point2[2]),
+                            material,
+                        ),
+                    );
+                    continue 'begin_search;
+                }
                 ObjectConfig::Plane {
                     point0,
                     point1,
@@ -543,6 +563,14 @@ enum ObjectConfig {
         corner0: [f64; 3],
         corner1: [f64; 3],
         facing_forward: bool,
+        material: String,
+    },
+    #[serde(rename_all = "camelCase")]
+    Triangle {
+        // forward face determined by right-hand rule
+        point0: [f64; 3],
+        point1: [f64; 3],
+        point2: [f64; 3],
         material: String,
     },
     #[serde(rename_all = "camelCase")]

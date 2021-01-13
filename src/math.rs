@@ -293,172 +293,27 @@ pub fn get_sphere_uv(p: Point3) -> (f64, f64) {
     (u, v)
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
-struct Vec4([f64; 4]);
-
-impl std::ops::Add for Vec4 {
-    type Output = Self;
-    fn add(self, other: Self) -> Self::Output {
-        Self([
-            self.0[0] + other.0[0],
-            self.0[1] + other.0[1],
-            self.0[2] + other.0[2],
-            self.0[3] + other.0[3],
-        ])
+// collision between a line defined by a point la and a direction lab
+// and a plane defined by a point p0 and two directions p01 and p02
+pub fn line_plane_collision(
+    la: Point3,
+    lab: Vec3,
+    p0: Point3,
+    p01: Vec3,
+    p02: Vec3,
+) -> Option<Vec3> {
+    const MARGIN: f64 = 0.0000001;
+    let cross_p = cross(p01, p02);
+    let determinant = dot(-lab, cross_p);
+    if determinant < -MARGIN || determinant > MARGIN {
+        let denominator = dot(-lab, cross_p);
+        let t = dot(cross_p, la - p0) / denominator;
+        let u = dot(cross(p02, -lab), la - p0) / denominator;
+        let v = dot(cross(-lab, p01), la - p0) / denominator;
+        Some(Vec3::new(t, u, v))
+    } else {
+        None
     }
-}
-
-impl std::ops::AddAssign for Vec4 {
-    fn add_assign(&mut self, other: Self) {
-        let new = *self + other;
-        *self = new;
-    }
-}
-
-impl std::ops::Sub for Vec4 {
-    type Output = Self;
-    fn sub(self, other: Self) -> Self::Output {
-        Self([
-            self.0[0] - other.0[0],
-            self.0[1] - other.0[1],
-            self.0[2] - other.0[2],
-            self.0[3] - other.0[3],
-        ])
-    }
-}
-
-impl std::ops::SubAssign for Vec4 {
-    fn sub_assign(&mut self, other: Self) {
-        let new = *self - other;
-        *self = new;
-    }
-}
-
-impl std::ops::Neg for Vec4 {
-    type Output = Self;
-    fn neg(self) -> Self {
-        Self([-self.0[0], -self.0[1], -self.0[2], -self.0[3]])
-    }
-}
-
-impl std::ops::Mul<f64> for Vec4 {
-    type Output = Self;
-    fn mul(self, other: f64) -> Self::Output {
-        Self([
-            self.0[0] * other,
-            self.0[1] * other,
-            self.0[2] * other,
-            self.0[3] * other,
-        ])
-    }
-}
-
-impl std::ops::Mul<Vec4> for f64 {
-    type Output = Vec4;
-    fn mul(self, other: Vec4) -> Self::Output {
-        other * self
-    }
-}
-
-impl std::ops::MulAssign<f64> for Vec4 {
-    fn mul_assign(&mut self, other: f64) {
-        let new = *self * other;
-        *self = new;
-    }
-}
-
-impl std::ops::Div<f64> for Vec4 {
-    type Output = Self;
-    fn div(self, other: f64) -> Self::Output {
-        Vec4([
-            self.0[0] / other,
-            self.0[1] / other,
-            self.0[2] / other,
-            self.0[3] / other,
-        ])
-    }
-}
-
-impl std::ops::DivAssign<f64> for Vec4 {
-    fn div_assign(&mut self, other: f64) {
-        let new = *self / other;
-        *self = new;
-    }
-}
-
-impl std::ops::Index<usize> for Vec4 {
-    type Output = f64;
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.0[index]
-    }
-}
-
-impl std::ops::IndexMut<usize> for Vec4 {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        &mut self.0[index]
-    }
-}
-
-pub fn solve_vec3_system(a: Vec3, b: Vec3, c: Vec3, u: Vec3) -> Option<Vec3> {
-    let mut rows = [
-        Vec4([a.x, b.x, c.x, u.x]),
-        Vec4([a.y, b.y, c.y, u.y]),
-        Vec4([a.z, b.z, c.z, u.z]),
-    ];
-    const NUM_ROWS: usize = 3;
-    const NUM_COLUMNS: usize = 3;
-
-    let mut working_row = 0;
-    for working_column in 0..NUM_COLUMNS {
-        // reduce leading cells to 1 or 0
-        for r in rows[working_row..].iter_mut() {
-            if r[working_column] != 0.0 {
-                *r /= r[working_column];
-                r[working_column] = 1.0;
-            }
-        }
-        // make top remaining row a 1 if possible
-        if rows[working_row][working_column] == 0.0 {
-            for i in working_row + 1..NUM_ROWS {
-                if rows[i][working_column] != 0.0 {
-                    rows.swap(working_row, i);
-                    break;
-                }
-            }
-        }
-        // if it *is* a 1, subtract it from all the other rows to reduce
-        if rows[working_row][working_column] != 0.0 {
-            // rows below
-            for i in working_row + 1..NUM_ROWS {
-                if rows[i][working_column] != 0.0 {
-                    rows[i] -= rows[working_row];
-                    rows[i][working_column] = 0.0;
-                }
-            }
-            // rows above
-            for i in 0..working_row {
-                rows[i] -= rows[working_row] * rows[i][working_column];
-                rows[i][working_column] = 0.0;
-            }
-            working_row += 1;
-        }
-    }
-
-    // now, the matrix is in RREF
-    let mut working_row = 0;
-    let mut out = Vec3::new(0, 0, 0);
-    for working_column in 0..NUM_COLUMNS {
-        if rows[working_row][working_column] == 1.0 {
-            out[working_row] = rows[working_column][NUM_COLUMNS];
-            working_row += 1;
-        }
-    }
-    for i in working_row..3 {
-        if rows[i][3] != 0.0 {
-            return None;
-        }
-    }
-    Some(out)
 }
 
 #[test]
@@ -480,32 +335,22 @@ fn test_refract() {
 }
 
 #[test]
-fn test_matrix_reductions() {
-    let tests = [
-        [
-            Vec3::new(1, 2, 3),
-            Vec3::new(-1, 2, 1),
-            Vec3::new(0, 2, -2),
-            Vec3::new(5, 1, -1),
-        ],
-        [
-            Vec3::new(0, 9, 3),
-            Vec3::new(1, 2, 4),
-            Vec3::new(0, 2, -2),
-            Vec3::new(5, 1, 0),
-        ],
-        [
-            Vec3::new(0, 9, 3),
-            Vec3::new(0, 2, 4),
-            Vec3::new(0, 2, -2),
-            Vec3::new(5, 1, 0),
-        ],
-    ];
+fn test_line_plane() {
+    let tests = [[
+        Vec3::new(1, 2, 3),
+        Vec3::new(-1, 2, 1),
+        Vec3::new(0, 2, -2),
+        Vec3::new(5, 1, -1),
+        Vec3::new(0, 9, 3),
+    ]];
     for a in tests.iter() {
-        if let Some(result) = solve_vec3_system(a[0], a[1], a[2], a[3]) {
-            assert_eq!(result[0] * a[0] + result[1] * a[1] + result[2] * a[2], a[3]);
+        if let Some(result) = line_plane_collision(a[0], a[1], a[2], a[3], a[4]) {
+            assert_eq!(
+                a[0] + a[1] * result[0],
+                a[2] + a[3] * result[1] + a[4] * result[2]
+            );
         } else {
-            eprintln!("{:?} is unsatisfiable", a);
+            assert_eq!(dot(a[1], cross(a[3], a[4])), 0.0);
         }
     }
 }

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::hitting::{surrounding_box, Colour, HitRecord, Hittable, Material, AABB};
 use crate::materials::{DiffuseLight, Lambertian};
 use crate::math::{
-    cross, distance_to_sphere, dot, get_sphere_uv, solve_vec3_system, Point3, Ray, Vec3,
+    cross, distance_to_sphere, dot, get_sphere_uv, line_plane_collision, Point3, Ray, Vec3,
 };
 use crate::transforms::{RotateY, RotateZ, Translate};
 
@@ -455,6 +455,60 @@ impl Hittable for ConstantMedium {
     }
 }
 
+pub struct Triangle {
+    point: Point3,
+    vec1: Vec3,
+    vec2: Vec3,
+    normal: Vec3,
+    material: Arc<dyn Material>,
+}
+
+impl Triangle {
+    pub fn new(a: Point3, b: Point3, c: Point3, material: &Arc<dyn Material>) -> Arc<dyn Hittable> {
+        let vec1 = b - a;
+        let vec2 = c - a;
+        let normal = cross(vec1, vec2).unit_vector();
+        Arc::new(Triangle {
+            point: a,
+            vec1,
+            vec2,
+            normal,
+            material: Arc::clone(material),
+        })
+    }
+}
+
+impl Hittable for Triangle {
+    fn hit(&self, ray: &Ray, min_dist: f64, max_dist: f64) -> Option<HitRecord> {
+        if let Some(solution) =
+            line_plane_collision(ray.origin, ray.direction, self.point, self.vec1, self.vec2)
+        {
+            let distance = solution[0];
+            if distance < min_dist || distance > max_dist {
+                None
+            } else if solution[1] < 0.0 || solution[2] < 0.0 || solution[1] + solution[2] > 1.0 {
+                None
+            } else {
+                Some(HitRecord::new(
+                    ray,
+                    distance,
+                    self.normal,
+                    Arc::clone(&self.material),
+                    (solution[2], solution[1]),
+                ))
+            }
+        } else {
+            None
+        }
+    }
+    fn bounding_box(&self, _time0: f64, _time1: f64) -> Option<AABB> {
+        None
+    }
+    fn _print(&self) -> String {
+        format!("plane ({}, {}, {})", self.point, self.vec1, self.vec2)
+    }
+}
+
 pub struct Plane {
     point: Point3,
     vec1: Vec3,
@@ -488,12 +542,9 @@ impl Plane {
 
 impl Hittable for Plane {
     fn hit(&self, ray: &Ray, min_dist: f64, max_dist: f64) -> Option<HitRecord> {
-        if let Some(solution) = solve_vec3_system(
-            ray.direction,
-            -self.vec1,
-            -self.vec2,
-            self.point - ray.origin,
-        ) {
+        if let Some(solution) =
+            line_plane_collision(ray.origin, ray.direction, self.point, self.vec1, self.vec2)
+        {
             let distance = solution[0];
             if distance < min_dist || distance > max_dist {
                 None
