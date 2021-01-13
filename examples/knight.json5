@@ -1,0 +1,70 @@
+{
+    // A chess knight
+    camera: {
+        lookFrom: [-30, 0, -30],
+        lookAt: [0, 0, 0],
+        directionUp: [0, 1, 0],
+        fieldOfView: 40,
+        aspectRatio: [1, 1],
+        aperture: 0.0,
+        distanceToFocus: 75,
+        startTime: 0,
+        endTime: 1,
+    },
+    background: {
+        type: "gradient",
+        direction: [0, 1, 0],
+        colour0: [0.15, 0.15, 0.15],
+        colour1: [0.1, 0.1, 0.3],
+    },
+    textures: {
+        white: {
+            type: "solidColour",
+            colour: [0.73, 0.73, 0.73],
+        },
+    },
+    materials: {
+        white: {
+            type: "lambertian",
+            texture: "white",
+        },
+        glass: {
+            type: "dielectric",
+            indexOfRefraction: 2,
+        },
+    },
+    objects: {
+        knight1: {
+            type: "mesh",
+            filename: "examples/knight.obj",
+            material: "glass",
+        },
+        knight2: {
+            type: "rotateX",
+            prototype: "knight1",
+            degrees: -90,
+        },
+        knight3: {
+            type: "rotateY",
+            prototype: "knight2",
+            degrees: -110,
+        },
+        knight: {
+            type: "translate",
+            prototype: "knight3",
+            offset: [-25, -5, -30],
+        },
+        spotlight: {
+            type: "spotlight",
+            lookAt: [0, 0, 0],
+            lookFrom: [-30, 10, -15],
+            length: 30,
+            width: 15,
+            light: [40, 40, 40],
+        },
+    },
+    world: [
+        "knight",
+        //"spotlight"
+    ],
+}

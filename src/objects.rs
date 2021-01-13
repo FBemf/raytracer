@@ -1,8 +1,12 @@
+use anyhow::{anyhow, Result};
 use rand::Rng;
+use wavefront_obj::obj::{self, Primitive};
 
+use std::fs::read_to_string;
 use std::sync::Arc;
 
-use crate::hitting::{surrounding_box, Colour, HitRecord, Hittable, Material, AABB};
+use crate::camera::{TIME_MAX, TIME_MIN};
+use crate::hitting::{surrounding_box, BVHNode, Colour, HitRecord, Hittable, Material, AABB};
 use crate::materials::{DiffuseLight, Lambertian};
 use crate::math::{
     cross, distance_to_sphere, dot, get_sphere_uv, line_plane_collision, Point3, Ray, Vec3,
@@ -460,6 +464,7 @@ pub struct Triangle {
     vec1: Vec3,
     vec2: Vec3,
     normal: Vec3,
+    bbox: AABB,
     material: Arc<dyn Material>,
 }
 
@@ -468,14 +473,64 @@ impl Triangle {
         let vec1 = b - a;
         let vec2 = c - a;
         let normal = cross(vec1, vec2).unit_vector();
+
         Arc::new(Triangle {
             point: a,
             vec1,
             vec2,
             normal,
+            bbox: vertices_to_bbox(vec![a, b, c]),
             material: Arc::clone(material),
         })
     }
+    pub fn with_normal(
+        a: Point3,
+        b: Point3,
+        c: Point3,
+        normal: Vec3,
+        material: &Arc<dyn Material>,
+    ) -> Arc<dyn Hittable> {
+        let vec1 = b - a;
+        let vec2 = c - a;
+        let possible_normal = cross(vec1, vec2).unit_vector();
+
+        Arc::new(Triangle {
+            point: a,
+            vec1,
+            vec2,
+            normal: if dot(normal, possible_normal) < 0.0 {
+                -normal
+            } else {
+                normal
+            },
+            bbox: vertices_to_bbox(vec![a, b, c]),
+            material: Arc::clone(material),
+        })
+    }
+}
+
+fn vertices_to_bbox(vertices: Vec<Vec3>) -> AABB {
+    let minimum = vertices.iter().fold(
+        Vec3::new(f64::INFINITY, f64::INFINITY, f64::INFINITY),
+        |acc, vec| {
+            Vec3::new(
+                f64::min(acc.x, vec.x),
+                f64::min(acc.y, vec.y),
+                f64::min(acc.z, vec.z),
+            )
+        },
+    );
+    let maximum = vertices.iter().fold(
+        Vec3::new(f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY),
+        |acc, vec| {
+            Vec3::new(
+                f64::max(acc.x, vec.x),
+                f64::max(acc.y, vec.y),
+                f64::max(acc.z, vec.z),
+            )
+        },
+    );
+    AABB { minimum, maximum }
 }
 
 impl Hittable for Triangle {
@@ -502,10 +557,10 @@ impl Hittable for Triangle {
         }
     }
     fn bounding_box(&self, _time0: f64, _time1: f64) -> Option<AABB> {
-        None
+        Some(self.bbox)
     }
     fn _print(&self) -> String {
-        format!("plane ({}, {}, {})", self.point, self.vec1, self.vec2)
+        format!("triangle ({}, {}, {})", self.point, self.vec1, self.vec2)
     }
 }
 
@@ -659,6 +714,51 @@ impl Hittable for Spotlight {
     fn _print(&self) -> String {
         format!("spotlight ({}, {})", self.minimum, self.maximum)
     }
+}
+
+pub fn load_mesh(
+    filename: &str,
+    name: &str,
+    material: &Arc<dyn Material>,
+) -> Result<Arc<dyn Hittable>> {
+    let obj_file = read_to_string(filename)?;
+    let objects = obj::parse(&obj_file)?.objects;
+    let object_names = objects
+        .iter()
+        .map(|x| x.name.clone())
+        .collect::<Vec<String>>();
+    let object = objects.into_iter().find(|x| x.name == name).ok_or(anyhow!(
+        "No object with name {} in file {}\nObject names are {:?}",
+        name,
+        filename,
+        object_names,
+    ))?;
+    let v = object.vertices;
+    let normals = object.normals;
+    let mut triangles = Vec::new();
+    for g in object.geometry {
+        for s in g.shapes {
+            if let Primitive::Triangle(a, b, c) = s.primitive {
+                if let Some(normal) = a.2.or(b.2).or(c.2) {
+                    triangles.push(Triangle::with_normal(
+                        Point3::new(v[a.0].x, v[a.0].y, v[a.0].z),
+                        Point3::new(v[b.0].x, v[b.0].y, v[b.0].z),
+                        Point3::new(v[c.0].x, v[c.0].y, v[c.0].z),
+                        Vec3::new(normals[normal].x, normals[normal].y, normals[normal].z),
+                        material,
+                    ));
+                } else {
+                    triangles.push(Triangle::new(
+                        Point3::new(v[a.0].x, v[a.0].y, v[a.0].z),
+                        Point3::new(v[b.0].x, v[b.0].y, v[b.0].z),
+                        Point3::new(v[c.0].x, v[c.0].y, v[c.0].z),
+                        material,
+                    ));
+                }
+            }
+        }
+    }
+    Ok(BVHNode::from_vec(triangles, TIME_MIN, TIME_MAX))
 }
 
 #[test]

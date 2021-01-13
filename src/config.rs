@@ -356,6 +356,19 @@ fn build_hittables<'a>(
                     );
                     continue 'begin_search;
                 }
+                ObjectConfig::Mesh {
+                    filename,
+                    object_name,
+                    material,
+                } => {
+                    let material = materials
+                        .get(&material as &str)
+                        .ok_or(anyhow!("Material {} does not exist", material))?;
+                    let object_name = if let Some(n) = object_name { n } else { "" };
+                    let triangles = objects::load_mesh(filename, object_name, material)?;
+                    hittable_list.insert(name, triangles);
+                    continue 'begin_search;
+                }
                 ObjectConfig::Spotlight {
                     look_from,
                     look_at,
@@ -579,6 +592,12 @@ enum ObjectConfig {
         point1: [f64; 3],
         point2: [f64; 3],
         uv_repeat: f64,
+        material: String,
+    },
+    #[serde(rename_all = "camelCase")]
+    Mesh {
+        filename: String,
+        object_name: Option<String>,
         material: String,
     },
     #[serde(rename_all = "camelCase")]
