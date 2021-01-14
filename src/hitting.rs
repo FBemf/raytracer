@@ -158,9 +158,14 @@ impl BVHNode {
         let axis = rand::thread_rng().gen_range(0..3);
         objects.sort_by(|a, b| bbox_compare(a, b, axis));
         if objects.len() == 0 {
-            panic!("BVHNode cannot be created from empty slice");
+            if no_bbox.len() > 0 {
+                return Arc::new(no_bbox);
+            } else {
+                panic!("BVHNode cannot be created from empty slice");
+            }
         } else if objects.len() == 1 {
-            objects.pop().unwrap()
+            no_bbox.push(objects.pop().unwrap());
+            return Arc::new(no_bbox);
         } else {
             let halfway = objects.len() / 2;
             let right_objects = objects.split_off(halfway);

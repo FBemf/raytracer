@@ -72,20 +72,19 @@ fn build_textures(master_config: &MasterConfig) -> Result<HashMap<&str, Arc<dyn 
     'begin_search: while texture_configs.len() != 0 {
         for _ in 0..texture_configs.len() {
             let (name, texture) = texture_configs.pop_front().unwrap();
-            match texture {
-                TextureConfig::SolidColour { colour } => {
-                    texture_list.insert(
-                        name,
-                        Arc::new(textures::SolidColour {
-                            colour: Colour::new(colour[0], colour[1], colour[2]),
-                        }),
-                    );
-                    continue 'begin_search;
-                }
+            let found_texture: Option<Arc<dyn Texture>> = match texture {
+                TextureConfig::SolidColour { colour } => Some(Arc::new(textures::SolidColour {
+                    colour: Colour::new(colour[0], colour[1], colour[2]),
+                })),
                 TextureConfig::ImageTexture { filename } => {
-                    texture_list.insert(name, textures::ImageTexture::from_file(&filename)?);
-                    continue 'begin_search;
+                    Some(textures::ImageTexture::from_file(&filename)?)
                 }
+            };
+            if let Some(texture) = found_texture {
+                texture_list.insert(name, texture);
+                continue 'begin_search;
+            } else {
+                texture_configs.push_back((name, texture));
             }
         }
         bail!(
@@ -109,58 +108,37 @@ fn build_materials<'a>(
     'begin_search: while material_configs.len() != 0 {
         for _ in 0..material_configs.len() {
             let (name, material) = material_configs.pop_front().unwrap();
-            match material {
+            let found_material: Option<Arc<dyn Material>> = match material {
                 MaterialConfig::Lambertian { texture } => {
                     let texture = textures
                         .get(&texture as &str)
                         .ok_or(anyhow!("Texture {} does not exist", texture))?;
-                    material_list.insert(name, materials::Lambertian::with_texture(texture));
-                    continue 'begin_search;
+                    Some(materials::Lambertian::with_texture(texture))
                 }
-                MaterialConfig::Metal { fuzz, albedo } => {
-                    material_list.insert(
-                        name,
-                        Arc::new(materials::Metal {
-                            albedo: Colour::new(albedo[0], albedo[1], albedo[2]),
-                            fuzz: *fuzz,
-                        }),
-                    );
-                    continue 'begin_search;
-                }
+                MaterialConfig::Metal { fuzz, albedo } => Some(Arc::new(materials::Metal {
+                    albedo: Colour::new(albedo[0], albedo[1], albedo[2]),
+                    fuzz: *fuzz,
+                })),
                 MaterialConfig::Dielectric {
                     index_of_refraction,
-                } => {
-                    material_list.insert(
-                        name,
-                        Arc::new(materials::Dielectric {
-                            index_of_refraction: *index_of_refraction,
-                        }),
-                    );
-                    continue 'begin_search;
-                }
+                } => Some(Arc::new(materials::Dielectric {
+                    index_of_refraction: *index_of_refraction,
+                })),
                 MaterialConfig::DiffuseLight { emit } => {
                     let texture = textures
                         .get(&emit as &str)
                         .ok_or(anyhow!("Texture {} does not exist", emit))?;
-                    material_list.insert(
-                        name,
-                        Arc::new(materials::DiffuseLight {
-                            emit: Arc::clone(texture),
-                        }),
-                    );
-                    continue 'begin_search;
+                    Some(Arc::new(materials::DiffuseLight {
+                        emit: Arc::clone(texture),
+                    }))
                 }
                 MaterialConfig::Isotropic { albedo } => {
                     let texture = textures
                         .get(&albedo as &str)
                         .ok_or(anyhow!("Texture {} does not exist", albedo))?;
-                    material_list.insert(
-                        name,
-                        Arc::new(materials::Isotropic {
-                            albedo: Arc::clone(texture),
-                        }),
-                    );
-                    continue 'begin_search;
+                    Some(Arc::new(materials::Isotropic {
+                        albedo: Arc::clone(texture),
+                    }))
                 }
                 MaterialConfig::Checkered {
                     odd,
@@ -170,19 +148,21 @@ fn build_materials<'a>(
                     if material_list.contains_key(&odd as &str)
                         && material_list.contains_key(&even as &str)
                     {
-                        material_list.insert(
-                            name,
-                            Arc::new(materials::Checkered {
-                                odd: Arc::clone(&material_list[odd as &str]),
-                                even: Arc::clone(&material_list[even as &str]),
-                                tile_density: *tile_density,
-                            }),
-                        );
-                        continue 'begin_search;
+                        Some(Arc::new(materials::Checkered {
+                            odd: Arc::clone(&material_list[odd as &str]),
+                            even: Arc::clone(&material_list[even as &str]),
+                            tile_density: *tile_density,
+                        }))
+                    } else {
+                        None
                     }
-                    // couldn't build yet
-                    material_configs.push_back((name, material));
                 }
+            };
+            if let Some(material) = found_material {
+                material_list.insert(name, material);
+                continue 'begin_search;
+            } else {
+                material_configs.push_back((name, material));
             }
         }
         bail!(
@@ -206,7 +186,7 @@ fn build_hittables<'a>(
     'begin_search: while hittable_configs.len() != 0 {
         for _ in 0..hittable_configs.len() {
             let (name, hittable) = hittable_configs.pop_front().unwrap();
-            match hittable {
+            let found_hittable: Option<Arc<dyn Hittable>> = match hittable {
                 ObjectConfig::Sphere {
                     centre,
                     radius,
@@ -215,15 +195,11 @@ fn build_hittables<'a>(
                     let material = materials
                         .get(&material as &str)
                         .ok_or(anyhow!("Material {} does not exist", material))?;
-                    hittable_list.insert(
-                        name,
-                        objects::Sphere::new(
-                            Point3::new(centre[0], centre[1], centre[2]),
-                            *radius,
-                            material,
-                        ),
-                    );
-                    continue 'begin_search;
+                    Some(objects::Sphere::new(
+                        Point3::new(centre[0], centre[1], centre[2]),
+                        *radius,
+                        material,
+                    ))
                 }
                 ObjectConfig::MovingSphere {
                     centre0,
@@ -236,18 +212,14 @@ fn build_hittables<'a>(
                     let material = materials
                         .get(&material as &str)
                         .ok_or(anyhow!("Material {} does not exist", material))?;
-                    hittable_list.insert(
-                        name,
-                        objects::MovingSphere::new(
-                            Point3::new(centre0[0], centre0[1], centre0[2]),
-                            Point3::new(centre1[0], centre1[1], centre1[2]),
-                            *time0,
-                            *time1,
-                            *radius,
-                            material,
-                        ),
-                    );
-                    continue 'begin_search;
+                    Some(objects::MovingSphere::new(
+                        Point3::new(centre0[0], centre0[1], centre0[2]),
+                        Point3::new(centre1[0], centre1[1], centre1[2]),
+                        *time0,
+                        *time1,
+                        *radius,
+                        material,
+                    ))
                 }
                 ObjectConfig::Block {
                     corner0,
@@ -257,15 +229,11 @@ fn build_hittables<'a>(
                     let material = materials
                         .get(&material as &str)
                         .ok_or(anyhow!("Material {} does not exist", material))?;
-                    hittable_list.insert(
-                        name,
-                        objects::Block::new(
-                            Point3::new(corner0[0], corner0[1], corner0[2]),
-                            Point3::new(corner1[0], corner1[1], corner1[2]),
-                            material,
-                        ),
-                    );
-                    continue 'begin_search;
+                    Some(objects::Block::new(
+                        Point3::new(corner0[0], corner0[1], corner0[2]),
+                        Point3::new(corner1[0], corner1[1], corner1[2]),
+                        material,
+                    ))
                 }
                 ObjectConfig::Rect {
                     corner0,
@@ -276,43 +244,39 @@ fn build_hittables<'a>(
                     let material = materials
                         .get(&material as &str)
                         .ok_or(anyhow!("Material {} does not exist", material))?;
-                    hittable_list.insert(
-                        name,
-                        if corner0[0] == corner1[0] {
-                            objects::YZRect::new(
-                                corner0[1],
-                                corner1[1],
-                                corner0[2],
-                                corner1[2],
-                                corner0[0],
-                                material,
-                                *facing_forward,
-                            )
-                        } else if corner0[1] == corner1[1] {
-                            objects::XZRect::new(
-                                corner0[0],
-                                corner1[0],
-                                corner0[2],
-                                corner1[2],
-                                corner0[1],
-                                material,
-                                *facing_forward,
-                            )
-                        } else if corner0[2] == corner1[2] {
-                            objects::XYRect::new(
-                                corner0[0],
-                                corner1[0],
-                                corner0[1],
-                                corner1[1],
-                                corner0[2],
-                                material,
-                                *facing_forward,
-                            )
-                        } else {
-                            bail!("Rectangles are 2d; corner0 and corner1 must be equal along one axis")
-                        },
-                    );
-                    continue 'begin_search;
+                    Some(if corner0[0] == corner1[0] {
+                        objects::YZRect::new(
+                            corner0[1],
+                            corner1[1],
+                            corner0[2],
+                            corner1[2],
+                            corner0[0],
+                            material,
+                            *facing_forward,
+                        )
+                    } else if corner0[1] == corner1[1] {
+                        objects::XZRect::new(
+                            corner0[0],
+                            corner1[0],
+                            corner0[2],
+                            corner1[2],
+                            corner0[1],
+                            material,
+                            *facing_forward,
+                        )
+                    } else if corner0[2] == corner1[2] {
+                        objects::XYRect::new(
+                            corner0[0],
+                            corner1[0],
+                            corner0[1],
+                            corner1[1],
+                            corner0[2],
+                            material,
+                            *facing_forward,
+                        )
+                    } else {
+                        bail!("Rectangles are 2d; corner0 and corner1 must be equal along one axis")
+                    })
                 }
                 ObjectConfig::Triangle {
                     point0,
@@ -323,16 +287,12 @@ fn build_hittables<'a>(
                     let material = materials
                         .get(&material as &str)
                         .ok_or(anyhow!("Material {} does not exist", material))?;
-                    hittable_list.insert(
-                        name,
-                        objects::Triangle::new(
-                            Point3::new(point0[0], point0[1], point0[2]),
-                            Point3::new(point1[0], point1[1], point1[2]),
-                            Point3::new(point2[0], point2[1], point2[2]),
-                            material,
-                        ),
-                    );
-                    continue 'begin_search;
+                    Some(objects::Triangle::new(
+                        Point3::new(point0[0], point0[1], point0[2]),
+                        Point3::new(point1[0], point1[1], point1[2]),
+                        Point3::new(point2[0], point2[1], point2[2]),
+                        material,
+                    ))
                 }
                 ObjectConfig::Plane {
                     point0,
@@ -344,17 +304,13 @@ fn build_hittables<'a>(
                     let material = materials
                         .get(&material as &str)
                         .ok_or(anyhow!("Material {} does not exist", material))?;
-                    hittable_list.insert(
-                        name,
-                        objects::Plane::new(
-                            Point3::new(point0[0], point0[1], point0[2]),
-                            Point3::new(point1[0], point1[1], point1[2]),
-                            Point3::new(point2[0], point2[1], point2[2]),
-                            *uv_repeat,
-                            material,
-                        ),
-                    );
-                    continue 'begin_search;
+                    Some(objects::Plane::new(
+                        Point3::new(point0[0], point0[1], point0[2]),
+                        Point3::new(point1[0], point1[1], point1[2]),
+                        Point3::new(point2[0], point2[1], point2[2]),
+                        *uv_repeat,
+                        material,
+                    ))
                 }
                 ObjectConfig::Mesh {
                     filename,
@@ -365,9 +321,7 @@ fn build_hittables<'a>(
                         .get(&material as &str)
                         .ok_or(anyhow!("Material {} does not exist", material))?;
                     let object_name = if let Some(n) = object_name { n } else { "" };
-                    let triangles = objects::load_mesh(filename, object_name, material)?;
-                    hittable_list.insert(name, triangles);
-                    continue 'begin_search;
+                    Some(objects::load_mesh(filename, object_name, material)?)
                 }
                 ObjectConfig::Spotlight {
                     look_from,
@@ -375,19 +329,13 @@ fn build_hittables<'a>(
                     length,
                     width,
                     light,
-                } => {
-                    hittable_list.insert(
-                        name,
-                        objects::Spotlight::new(
-                            Point3::new(look_from[0], look_from[1], look_from[2]),
-                            Point3::new(look_at[0], look_at[1], look_at[2]),
-                            *length,
-                            *width,
-                            Colour::new(light[0], light[1], light[2]),
-                        ),
-                    );
-                    continue 'begin_search;
-                }
+                } => Some(objects::Spotlight::new(
+                    Point3::new(look_from[0], look_from[1], look_from[2]),
+                    Point3::new(look_at[0], look_at[1], look_at[2]),
+                    *length,
+                    *width,
+                    Colour::new(light[0], light[1], light[2]),
+                )),
                 ObjectConfig::ConstantMedium {
                     boundary,
                     phase_function,
@@ -398,56 +346,52 @@ fn build_hittables<'a>(
                             .get(&phase_function as &str)
                             .ok_or(anyhow!("Material {} does not exist", phase_function))?;
                         let boundary = hittable_list.get(&boundary as &str).unwrap();
-                        let object = objects::ConstantMedium::new(boundary, material, *density);
-                        hittable_list.insert(name, object);
-                        continue 'begin_search;
+                        Some(objects::ConstantMedium::new(boundary, material, *density))
                     } else {
-                        hittable_configs.push_back((name, hittable));
+                        None
                     }
                 }
                 ObjectConfig::Translate { prototype, offset } => {
                     if hittable_list.contains_key(&prototype as &str) {
                         let prototype = hittable_list.get(&prototype as &str).unwrap();
-                        let object = transforms::Translate::translate(
+                        Some(transforms::Translate::translate(
                             prototype,
                             Vec3::new(offset[0], offset[1], offset[2]),
-                        );
-                        hittable_list.insert(name, object.into());
-                        continue 'begin_search;
+                        ))
                     } else {
-                        hittable_configs.push_back((name, hittable));
+                        None
                     }
                 }
                 ObjectConfig::RotateX { prototype, degrees } => {
                     if hittable_list.contains_key(&prototype as &str) {
                         let prototype = hittable_list.get(&prototype as &str).unwrap();
-                        let object = transforms::RotateX::by_degrees(prototype, *degrees);
-                        hittable_list.insert(name, object.into());
-                        continue 'begin_search;
+                        Some(transforms::RotateX::by_degrees(prototype, *degrees))
                     } else {
-                        hittable_configs.push_back((name, hittable));
+                        None
                     }
                 }
                 ObjectConfig::RotateY { prototype, degrees } => {
                     if hittable_list.contains_key(&prototype as &str) {
                         let prototype = hittable_list.get(&prototype as &str).unwrap();
-                        let object = transforms::RotateY::by_degrees(prototype, *degrees);
-                        hittable_list.insert(name, object.into());
-                        continue 'begin_search;
+                        Some(transforms::RotateY::by_degrees(prototype, *degrees))
                     } else {
-                        hittable_configs.push_back((name, hittable));
+                        None
                     }
                 }
                 ObjectConfig::RotateZ { prototype, degrees } => {
                     if hittable_list.contains_key(&prototype as &str) {
                         let prototype = hittable_list.get(&prototype as &str).unwrap();
-                        let object = transforms::RotateZ::by_degrees(prototype, *degrees);
-                        hittable_list.insert(name, object.into());
-                        continue 'begin_search;
+                        Some(transforms::RotateZ::by_degrees(prototype, *degrees))
                     } else {
-                        hittable_configs.push_back((name, hittable));
+                        None
                     }
                 }
+            };
+            if let Some(hittable) = found_hittable {
+                hittable_list.insert(name, hittable);
+                continue 'begin_search;
+            } else {
+                hittable_configs.push_back((name, hittable));
             }
         }
         bail!(

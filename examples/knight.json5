@@ -1,9 +1,9 @@
 {
     // A chess knight
     camera: {
-        lookFrom: [-30, 0, -30],
-        lookAt: [0, 0, 0],
-        directionUp: [0, 1, 0],
+        lookFrom: [-17, -8, 15],
+        lookAt: [0, 0, 5],
+        directionUp: [0, 0, 1],
         fieldOfView: 40,
         aspectRatio: [1, 1],
         aperture: 0.0,
@@ -12,15 +12,20 @@
         endTime: 1,
     },
     background: {
-        type: "gradient",
-        direction: [0, 1, 0],
-        colour0: [0.15, 0.15, 0.15],
-        colour1: [0.1, 0.1, 0.3],
+        type: "plainColour",
+        colour: [0.4, 0.4, 0.6],
+        //direction: [0, 0, 1],
+        //colour0: [0.15, 0.15, 0.15],
+        //colour1: [0.1, 0.1, 0.3],
     },
     textures: {
         white: {
             type: "solidColour",
             colour: [0.73, 0.73, 0.73],
+        },
+        black: {
+            type: "solidColour",
+            colour: [0.05, 0.05, 0.05],
         },
     },
     materials: {
@@ -28,43 +33,66 @@
             type: "lambertian",
             texture: "white",
         },
+        black: {
+            type: "lambertian",
+            texture: "black",
+        },
         glass: {
             type: "dielectric",
-            indexOfRefraction: 2,
+            indexOfRefraction: 1.5,
+        },
+        metal: {
+            type: "metal",
+            albedo: [0.73, 0.73, 0.73],
+            fuzz: 0,   
+        },
+        checkered: {
+            type: "checkered",
+            odd: "metal",
+            even: "black",
+            tileDensity: 2,
         },
     },
     objects: {
+        board: {
+            type: "plane",
+            point0: [0, 0, 0],
+            point1: [1, 0, 0],
+            point2: [0, 1, 0],
+            uvRepeat: 12,
+            material: "checkered",
+        },
         knight1: {
             type: "mesh",
             filename: "examples/knight.obj",
             material: "glass",
         },
-        knight2: {
-            type: "rotateX",
-            prototype: "knight1",
-            degrees: -90,
-        },
-        knight3: {
-            type: "rotateY",
-            prototype: "knight2",
-            degrees: -110,
-        },
         knight: {
             type: "translate",
-            prototype: "knight3",
-            offset: [-25, -5, -30],
+            prototype: "knight1",
+            offset: [-11, -16, 0.001],
         },
         spotlight: {
             type: "spotlight",
-            lookAt: [0, 0, 0],
-            lookFrom: [-30, 10, -15],
+            lookAt: [0, 0, 5],
+            lookFrom: [-30, -30, 15],
             length: 30,
-            width: 15,
+            width: 10,
+            light: [60, 60, 2],
+        },
+        beacon: {
+            type: "spotlight",
+            lookAt: [0, 0, 0],
+            lookFrom: [0, 0, 1],
+            length: 30,
+            width: 0.2,
             light: [40, 40, 40],
         },
     },
     world: [
         "knight",
-        //"spotlight"
+        "board",
+        "spotlight",
+        //"beacon",
     ],
 }
