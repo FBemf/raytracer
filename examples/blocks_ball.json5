@@ -2,7 +2,7 @@
     // A dark misty scene of a glass ball on top of blocks
     camera: {
         lookFrom: [478, 378, -600],
-        lookAt: [278, 178, 0],
+        lookAt: [278, 200, 0],
         directionUp: [0, 1, 0],
         fieldOfView: 40,
         aspectRatio: [16, 9],

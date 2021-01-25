@@ -51,19 +51,19 @@ struct Opt {
     #[structopt(short, long)]
     quiet: bool,
     /// Do not use non-ASCII symbols
-    #[structopt(short, long)]
+    #[structopt(long)]
     ascii_symbols_only: bool,
     /// Recover from part file
     #[structopt(short, long)]
     recover_from: Option<PathBuf>,
     /// Try to read as much of a corrupted part file as possible
-    #[structopt(short, long)]
+    #[structopt(long)]
     recover_corrupt: bool,
     /// Manually set length of progress bar
     #[structopt(short, long)]
     progress_bar_len: Option<usize>,
     /// Don't save partial progress in a part file in case of a crash
-    #[structopt(short, long)]
+    #[structopt(long)]
     no_part_file: bool,
 }
 
