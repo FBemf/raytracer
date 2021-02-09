@@ -13,9 +13,9 @@ Special features include:
 - A JSON5-based format for storing scenes
 - .PART files which cache partially-rendered scenes for crash recovery
 
-![cornell box][cover_1.jpg]
+![cornell box](cover_1.jpg)
 
-![knight mesh][cover_2.jpg]
+![knight mesh](cover_2.jpg)
 
 ## Usage
 
