@@ -19,6 +19,8 @@
         "deque",
         "hittables",
         "signum",
-        "RREF"
+        "RREF",
+        "deserialization",
+        "haha"
     ]
 }
