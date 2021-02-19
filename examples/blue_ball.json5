@@ -1,0 +1,157 @@
+{
+    // A basic cornell box setup
+    camera: {
+        lookFrom: [278, 278, -800],
+        lookAt: [278, 278, 0],
+        directionUp: [0, 1, 0],
+        fieldOfView: 40,
+        aspectRatio: [1, 1],
+        aperture: 0.0,
+        distanceToFocus: 900,
+        startTime: 0,
+        endTime: 1,
+    },
+    background: {
+        type: "gradient",
+        direction: [0, 1, 0],
+        colour0: [0.07, 0.05, 0],
+        colour1: [0, 0, 0],
+    },
+    textures: {
+        smoke: {
+            type: "solidColour",
+            colour: [1, 1, 1],
+        },
+        white: {
+            type: "solidColour",
+            colour: [0.73, 0.73, 0.73],
+        },
+        blue: {
+            type: "solidColour",
+            colour: [0.12, 0.25, 0.65],
+        },
+        light: {
+            type: "solidColour",
+            colour: [15, 15, 15],
+        },
+    },
+    materials: {
+        white: {
+            type: "lambertian",
+            texture: "white",
+        },
+        blue: {
+            type: "lambertian",
+            texture: "blue",
+        },
+        light: {
+            type: "diffuseLight",
+            emit: "light",
+        },
+        glass: {
+            type: "dielectric",
+            indexOfRefraction: 1.5,
+        },
+        smoke: {
+            type: "isotropic",
+            albedo: "smoke",
+        },
+    },
+    objects: {
+        leftWall: {
+            type: "rect",
+            corner0: [555, 0, 0],
+            corner1: [555, 555, 555],
+            facingForward: false,
+            material: "white",
+        },
+        rightWall: {
+            type: "rect",
+            corner0: [0, 0, 0],
+            corner1: [0, 555, 555],
+            facingForward: true,
+            material: "white",
+        },
+        light: {
+            type: "rect",
+            corner0: [214, 554, 227],
+            corner1: [343, 554, 332],
+            facingForward: false,
+            material: "light",
+        },
+        floor: {
+            type: "rect",
+            corner0: [0, 0, 0],
+            corner1: [555, 0, 555],
+            facingForward: true,
+            material: "white",
+        },
+        ceiling: {
+            type: "rect",
+            corner0: [0, 555, 0],
+            corner1: [555, 555, 555],
+            facingForward: false,
+            material: "white",
+        },
+        backWall: {
+            type: "rect",
+            corner0: [0, 0, 555],
+            corner1: [555, 555, 555],
+            facingForward: false,
+            material: "glass",
+        },
+        tallBlock0: {
+            type: "block",
+            corner0: [0, 0.1, 0],
+            corner1: [165, 330, 165],
+            material: "glass",
+        },
+        tallBlock1: {
+            type: "rotateY",
+            prototype: "tallBlock0",
+            degrees: 15,
+        },
+        tallBlock: {
+            type: "translate",
+            prototype: "tallBlock1",
+            offset: [285, 0, 295],
+        },
+        smoke: {
+            type: "constantMedium",
+            boundary: "tallBlock",
+            phaseFunction: "smoke",
+            density: 0.0013,
+        },
+        glassSphere: {
+            type: "sphere",
+            centre: [300, 100.1, 50],
+            radius: 100,
+            material: "glass",
+        },
+        blueSphereSubsurface: {
+            type: "sphere",
+            centre: [160, 120.1, 350],
+            radius: 110,
+            material: "blue",
+        },
+        blueSphere: {
+            type: "sphere",
+            centre: [160, 120.1, 350],
+            radius: 120,
+            material: "glass",
+        },
+    },
+    world: [
+        "leftWall",
+        "rightWall",
+        "floor",
+        "ceiling",
+        "backWall",
+        "light",
+        "tallBlock",
+        "smoke",
+        "glassSphere",
+        "blueSphere",
+        "blueSphereSubsurface",
+    ],
+}
