@@ -60,8 +60,11 @@ struct Opt {
     #[structopt(long)]
     recover_corrupt: bool,
     /// Manually set length of progress bar
-    #[structopt(short, long)]
+    #[structopt(long)]
     progress_bar_len: Option<usize>,
+    /// Use this many of the most recent updates to determine time remaining
+    #[structopt(long, default_value = "100")]
+    progress_bar_samples: u32,
     /// Don't save partial progress in a part file in case of a crash
     #[structopt(long)]
     no_part_file: bool,
@@ -94,8 +97,8 @@ fn main() -> Result<()> {
         image_width,
         image_height,
         ascii_symbols_only: opt.ascii_symbols_only,
-        render_start,
         progress_bar_len: opt.progress_bar_len,
+        progress_bar_samples: opt.progress_bar_samples,
         progress_receiver,
         quiet: opt.quiet,
         no_part_file: opt.no_part_file,
@@ -178,7 +181,7 @@ struct ProgressInfo {
     image_width: u32,
     image_height: u32,
     ascii_symbols_only: bool,
-    render_start: Instant,
+    progress_bar_samples: u32,
     progress_bar_len: Option<usize>,
     progress_receiver: mpsc::Receiver<(u32, Vec<u8>)>,
     quiet: bool,
@@ -214,13 +217,14 @@ fn monitor_progress(info: ProgressInfo) -> Result<()> {
         progress_bar_len,
         "Rendering",
         bar_symbols,
-        info.render_start,
+        info.progress_bar_samples,
+        info.image_height,
     );
-    for j in 0..info.image_height {
+    for _ in 0..info.image_height {
         let received = info.progress_receiver.recv().context("Rendering progress");
         if let Ok((line_number, part)) = received {
             if !info.quiet {
-                progress.update(j as usize, info.image_height as usize)?;
+                progress.update()?;
             }
             if let Some(file) = &mut part_file {
                 if let Err(e) = file.write_part(line_number, part) {
