@@ -1,5 +1,5 @@
 {
-    // A basic cornell box setup
+    // A nice cornell box setup with a transparent back wall
     camera: {
         lookFrom: [278, 278, -800],
         lookAt: [278, 278, 0],
