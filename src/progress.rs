@@ -1,6 +1,5 @@
 use anyhow::{Context, Result};
 
-use std::cmp;
 use std::convert::TryFrom;
 use std::io::Write;
 use std::time::{Duration, Instant};
@@ -67,17 +66,19 @@ impl Progress for TimedProgressBar<'_> {
             .rev()
             .take(self.number_samples as usize)
             .map(|i| i.elapsed());
-        let summed_update_time = times_elapsed
+        let update_times = times_elapsed
             .clone()
             .zip(times_elapsed.skip(1))
-            .map(|(a, b)| b - a)
-            .sum::<Duration>();
-        let average_update_time = summed_update_time
-            / cmp::min(self.number_samples as usize, self.update_times.len()) as u32;
-        let secs_left = ((self.times_will_be_updated
-            - u32::try_from(self.update_times.len()).unwrap())
-            * average_update_time)
-            .as_secs();
+            .map(|(a, b)| b - a);
+        let number_update_times = u32::try_from(update_times.len()).unwrap();
+        let secs_left = if number_update_times > 0 {
+            let average_update_time = update_times.sum::<Duration>() / number_update_times;
+            ((self.times_will_be_updated - u32::try_from(self.update_times.len()).unwrap())
+                * average_update_time)
+                .as_secs()
+        } else {
+            0
+        };
         // draw the progress bar
         let expected_time = format!(
             "{:2}:{:02}:{:02}",
